@@ -1,10 +1,10 @@
 import os 
 import subprocess
 
-CORPORA_DIRECTORY = "/home/michael/Documents/Honours-Thesis/corpora"
+CORPORA_DIRECTORY = "../corpora"
 TIMIT_DIR = os.path.join(CORPORA_DIRECTORY, "spade-TIMIT", "textgrid-wav")
 OUTPUT_DIR = "data"
-PATH_TO_AUTOVOT = "../autovot/autovot/bin/VotFrontEnd2"
+PATH_TO_AUTOVOT = "../autovot/autovot/bin"
 
 STOP_ALLOPHONES = ["b", "d", "g", "p", "t", "k", "bcl", "dcl", "gcl", "pcl", "tcl", "kcl", "dx", "q"]
 STOPS = ["b", "d", "g", "p", "t", "k"]
@@ -144,9 +144,15 @@ for stop in STOPS:
 
 with open(os.path.join(OUTPUT_DIR, f"inputlist"), "w") as input_f, open(os.path.join(OUTPUT_DIR, f"outputlist"), "w") as output_f:
     for stop in STOPS:
-        for x in stop_dictionary[stop][:100]:
+        for i, x in enumerate(stop_dictionary[stop][:100]):
+            if (x[1]/16000 - x[0]/16000) < 0.025:
+                continue
             file_info = "_".join(x[3].split('/')[-3:])
             input_f.write(f"\"{x[3]}.WAV\" {x[0]/16000:3f} {x[1]/16000:3f} {x[0]/16000:3f} {x[1]/16000:3f} [seconds]\n")
-            output_file = os.path.join(OUTPUT_DIR, "autovot_files", f"{stop}-{x[2]}-{file_info}")
+            output_file = os.path.join(OUTPUT_DIR, "autovot_files", f"{stop}-{x[2]}-{file_info}-{i}")
             output_f.write(f"{output_file}\n")
-subprocess.run([PATH_TO_AUTOVOT, os.path.join(OUTPUT_DIR, "inputlist"), os.path.join(OUTPUT_DIR, "outputlist"), "null"])
+subprocess.run([os.path.join(PATH_TO_AUTOVOT, "VotFrontEnd2"), "-verbose", "DEBUG", os.path.join(OUTPUT_DIR, "inputlist"), os.path.join(OUTPUT_DIR, "outputlist"), "null"])
+subprocess.run([os.path.join(PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-verbose", "DEBUG", "-output_predictions", "data/predictions", os.path.join(OUTPUT_DIR, "outputlist"), "null", "classifier/classifier"])
+with open(os.path.join(OUTPUT_DIR, "outputlist"), "r") as stopnames_f, open(os.path.join(OUTPUT_DIR, "predictions"), "r") as pred_f, open(os.path.join(OUTPUT_DIR, "real_pred"), "w") as f:
+    for stop, pred in zip(stopnames_f, pred_f):
+        f.write("{} {}".format(stop.strip('\n').split('/')[-1], pred))
