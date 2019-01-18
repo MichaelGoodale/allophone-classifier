@@ -1,5 +1,7 @@
 import os 
 
+CLASSIFIER = os.path.join("classifier", "classifier")
+
 CORPORA_DIRECTORY = "../corpora"
 TIMIT_DIR = os.path.join(CORPORA_DIRECTORY, "spade-TIMIT", "textgrid-wav")
 OUTPUT_DIR = "data"

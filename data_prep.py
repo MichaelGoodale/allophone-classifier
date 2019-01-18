@@ -1,5 +1,6 @@
 import os 
 import subprocess
+import time
 import settings as s
 from data_classes import Stop, same_place
 
@@ -55,20 +56,25 @@ for stop in s.STOPS:
         counts[allophone] = len([x for x in stop_dictionary[stop] if x.phone == allophone])
     print(f"{stop}:{counts}")
 
+inputlist = os.path.join(s.OUTPUT_DIR, "inputlist")
+outputlist = os.path.join(s.OUTPUT_DIR, "outputlist")
+predictions = os.path.join(s.OUTPUT_DIR, "predictions")
+
 with open(os.path.join(s.OUTPUT_DIR, f"inputlist"), "w") as input_f, open(os.path.join(s.OUTPUT_DIR, f"outputlist"), "w") as output_f:
     for stop in s.STOPS:
-        for i, x in enumerate(stop_dictionary[stop][:100]):
-            if x.duration/16000 < 0.025:
+        for i, x in enumerate(stop_dictionary[stop]):
+            if x.duration/16000 < 0.026:
                 continue
             file_info = "_".join(x.path.split('/')[-3:])
-
             input_f.write(f"\"{x.path}.WAV\" {x.begin/16000:3f} {x.end/16000:3f} {x.begin/16000:3f} {x.end/16000:3f} [seconds]\n")
             output_file = os.path.join(s.OUTPUT_DIR, "autovot_files", f"{stop}-{x.phone}-{file_info}-{i}")
             output_f.write(f"{output_file}\n")
+
 subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), "-verbose", "DEBUG", \
-        os.path.join(s.OUTPUT_DIR, "inputlist"), os.path.join(s.OUTPUT_DIR, "outputlist"), "null"])
+        inputlist, outputlist, "null"])
+time.sleep(5)
 subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-verbose", "DEBUG", \
-        "-output_predictions", os.path.join(s.OUTPUT_DIR, "predictions"), os.path.join(s.OUTPUT_DIR, "outputlist"), "null", "classifier/classifier"])
-with open(os.path.join(s.OUTPUT_DIR, "outputlist"), "r") as stopnames_f, open(os.path.join(s.OUTPUT_DIR, "predictions"), "r") as pred_f, open(os.path.join(s.OUTPUT_DIR, "real_pred"), "w") as f:
+        "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
+with open(outputlist, "r") as stopnames_f, open(predictions, "r") as pred_f, open(os.path.join(s.OUTPUT_DIR, "real_pred"), "w") as f:
     for stop, pred in zip(stopnames_f, pred_f):
         f.write("{} {}".format(stop.strip('\n').split('/')[-1], pred))
