@@ -70,11 +70,8 @@ with open(os.path.join(s.OUTPUT_DIR, f"inputlist"), "w") as input_f, open(os.pat
             output_file = os.path.join(s.OUTPUT_DIR, "autovot_files", f"{stop}-{x.phone}-{file_info}-{i}")
             output_f.write(f"{output_file}\n")
 
-subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), "-verbose", "DEBUG", \
-        inputlist, outputlist, "null"])
-time.sleep(5)
-subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-verbose", "DEBUG", \
-        "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
+subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), inputlist, outputlist, "null"])
+subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
 with open(outputlist, "r") as stopnames_f, open(predictions, "r") as pred_f, open(os.path.join(s.OUTPUT_DIR, "real_pred"), "w") as f:
     for stop, pred in zip(stopnames_f, pred_f):
         f.write("{} {}".format(stop.strip('\n').split('/')[-1], pred))
