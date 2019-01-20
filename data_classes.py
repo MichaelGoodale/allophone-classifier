@@ -1,4 +1,5 @@
 import settings as s
+import subprocess
 
 def same_place(closure, release):
     '''Takes two strings representing different phonemes and checks 
@@ -64,6 +65,7 @@ class Stop:
         self.phone = phone
         self.path = path
         self._word = None
+        self._word_position = None
         self._underlying_stop = None
 
     @property
@@ -71,11 +73,31 @@ class Stop:
         return self.end-self.begin
 
     @property
+    def sentence_length(self):
+        return float(subprocess.check_output(["soxi", "-D", self.path+".WAV"]))
+
+
+    @property
     def word(self):
         if self._word is not None:
             return self._word
         self._word = Word(self)
         return self._word
+
+    @property
+    def word_position(self):
+        if self._word_position is not None:
+            return self._word_position
+        for i, (begin, end, phone) in enumerate(self.word.actual_pronunciation):
+            if begin == self.begin and end == self.end:
+                break
+        if i == 0:
+            self._word_position = "initial"
+        elif i == len(self.word.actual_pronunciation) - 1:
+            self._word_position = "final"
+        else:
+            self._word_position = "medial"
+        return self._word_position
 
     @property
     def underlying_stop(self):

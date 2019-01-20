@@ -30,5 +30,10 @@ with open('TIMITDIC.TXT', 'r') as f:
         if line.startswith(';'):
             continue
         word, pronounciation = line.strip('\n').split('  ')
+        word, _, _= word.partition("~")
         timit_dictionary[word] = pronounciation.strip('/').split(' ')
+        if word.startswith("-"):
+            timit_dictionary[word[1:]] = pronounciation.strip('/').split(' ')
+        if word.endswith("-"):
+            timit_dictionary[word[:-1]] = pronounciation.strip('/').split(' ')
 
