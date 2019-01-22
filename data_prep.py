@@ -89,6 +89,7 @@ with open(os.path.join(s.OUTPUT_DIR, f"inputlist"), "w") as input_f, open(os.pat
 print(f"{err} stops excluded in total")
 subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), inputlist, outputlist, "null"])
 subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
+
 with open(outputlist, "r") as stopnames_f, open(predictions, "r") as pred_f, open(os.path.join(s.OUTPUT_DIR, "real_pred"), "w") as f:
     for stop, pred in zip(stopnames_f, pred_f):
         f.write("{} {}".format(" ".join(stop.strip('\n').split('/')[-1].split("-")), pred))
