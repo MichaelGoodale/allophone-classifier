@@ -8,6 +8,9 @@ import settings as s
 from sklearn import svm
 from sklearn import tree
 from sklearn.metrics import confusion_matrix
+from sklearn.preprocessing import OneHotEncoder
+import keras
+from keras import layers
 import matplotlib.pyplot as plt
 
 MINIMUM_CONF = -1000000.0
@@ -42,19 +45,28 @@ else:
     data = pd.read_pickle(os.path.join(s.OUTPUT_DIR, "dataframe.pkl"))
 
 for stop in s.STOPS:
-    stop_data = data[(data["phoneme"] == stop) & (data["word_pos"] == "initial")]
+    stop_data = data[(data["phoneme"] == stop)] #& (data["word_pos"] == "initial")]
     mask = np.random.rand(len(stop_data)) < 0.8
     y, classes = pd.factorize(stop_data.loc[:, "allophone"])
-    X = stop_data[["conf", "VOT"]+feature_slice]
+    X = stop_data[["conf", "VOT", "length"]+feature_slice]
 
     train_y = y[mask]
     test_y = y[~mask]
     train_X = X[mask]
     test_X = X[~mask]
 
-    #clf = tree.DecisionTreeClassifier(max_depth=5)
-    clf = svm.SVC()
+    clf = tree.DecisionTreeClassifier(max_depth=5)
     clf.fit(train_X, train_y)
+
+    #train_y = keras.utils.to_categorical(train_y)
+    #model = keras.Sequential()
+    #model.add(layers.Dense(20, activation="relu", input_shape=(3+63*20,)))
+    #model.add(layers.Dense(20, activation="relu"))
+    #model.add(layers.Dense(len(classes), activation="softmax"))
+    #model.compile(loss='binary_crossentropy', optimizer='adam')
+    #model.fit(train_X, train_y, epochs=10, batch_size=32)
+    #pred=np.argmax(model.predict(test_X), axis=1)
+
     pred = clf.predict(test_X)
     conf_mat = confusion_matrix(test_y, pred)
 
