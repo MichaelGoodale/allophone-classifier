@@ -13,23 +13,32 @@ import matplotlib.pyplot as plt
 MINIMUM_CONF = -1000000.0
 TEST_SPLIT = 0.8
 
+def get_values(path):
+    with open(os.path.join(s.OUTPUT_DIR, "autovot_files", path)) as f:
+        return int(f.readline().split(" ")[0])
+
 prediction_path = os.path.join(s.OUTPUT_DIR, "real_pred")
 data = pd.read_csv(prediction_path, sep=" ", names=["phoneme", "allophone", "word_pos", "label", "id", "conf", "begin", "end"])
+data["VOT"] = data["end"] - data["begin"]
+data["path"] = data['phoneme'].astype(str)+"-"+data['allophone']+"-"+data['word_pos']+"-"+data['label']+"-"+data['id' ].astype(str)
 
 
-
-for stop in ["t"]:
+for stop in ["t", "d"]:
     stop_data = data[(data["phoneme"] == stop)]# & (data["word_pos"] == "initial")]
     mask = np.random.rand(len(stop_data)) < 0.8
     y, classes = pd.factorize(stop_data.loc[:, "allophone"])
-    X = stop_data[["conf", "begin", "end"]]
+    X = stop_data[["conf", "VOT"]]
 
     train_y = y[mask]
     test_y = y[~mask]
     train_X = X[mask]
     test_X = X[~mask]
 
-    clf = tree.DecisionTreeClassifier()
+    #Oversample train_X
+
+
+
+    clf = tree.DecisionTreeClassifier(max_depth=5)
     clf.fit(train_X, train_y)
     pred = clf.predict(test_X)
     conf_mat = confusion_matrix(test_y, pred)
