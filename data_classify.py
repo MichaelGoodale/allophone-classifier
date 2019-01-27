@@ -9,11 +9,12 @@ from sklearn import svm
 from sklearn import tree
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import OneHotEncoder
-import keras
-from keras import layers
+#import keras
+#from keras import layers
 import matplotlib.pyplot as plt
 
 MINIMUM_CONF = -1000000.0
+OVERSAMPLING = True
 TEST_SPLIT = 0.8
 
 def get_length(path):
@@ -44,8 +45,8 @@ if not os.path.isfile(os.path.join(s.OUTPUT_DIR, "dataframe.pkl")):
 else:
     data = pd.read_pickle(os.path.join(s.OUTPUT_DIR, "dataframe.pkl"))
 
-for stop in s.STOPS:
-    stop_data = data[(data["phoneme"] == stop)] #& (data["word_pos"] == "initial")]
+for stop in ["t", "d"]:#s.STOPS:
+    stop_data = data[(data["phoneme"] == stop)]# & (data["word_pos"] == "initial")]
     mask = np.random.rand(len(stop_data)) < 0.8
     y, classes = pd.factorize(stop_data.loc[:, "allophone"])
     X = stop_data[["conf", "VOT", "length"]+feature_slice]
@@ -55,7 +56,8 @@ for stop in s.STOPS:
     train_X = X[mask]
     test_X = X[~mask]
 
-    clf = tree.DecisionTreeClassifier(max_depth=5)
+
+    clf = tree.DecisionTreeClassifier()
     clf.fit(train_X, train_y)
 
     #train_y = keras.utils.to_categorical(train_y)

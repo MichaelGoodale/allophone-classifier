@@ -54,11 +54,11 @@ for stop in s.STOPS:
         axarr[1, 1].scatter(allo["conf"], allo["VOT"], c=colours[i], label=allophone, alpha=0.5, s=5)
 
     axarr[0,0].set_xlabel("conf")
-    axarr[1,0].set_xlabel("begin")
+    axarr[1,0].set_xlabel("pca1")
     axarr[0,1].set_xlabel("conf")
     axarr[1,1].set_xlabel("conf")
     axarr[0,0].set_ylabel("begin")
-    axarr[1,0].set_ylabel("end")
+    axarr[1,0].set_ylabel("pca2")
     axarr[0,1].set_ylabel("length")
     axarr[1,1].set_ylabel("VOT")
     plt.legend()
