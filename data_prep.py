@@ -19,7 +19,7 @@ def extract_wav_files(sentence_path):
             if phone.phone in s.STOP_ALLOPHONES and next_phone.phone not in ["jh", "ch"]]
 
 
-    data_dict = {stop:[] for stop in s.STOPS}
+    data_dict = {stop:[] for stop in s.STOPS+s.EXTRA_PHONES}
     combined_stop = False
     err = 0
     for stop, next_stop in zip(stop_phones, stop_phones[1:]+[END_FAKE_STOP]):
@@ -42,11 +42,22 @@ def extract_wav_files(sentence_path):
             if stop.phone != "q":
                 err += 1
             continue
-
+    for phone in [x for x in sentence_phones if x.phone in s.OTHER_PHONES]:
+        try:
+            if phone.word_position == "initial" and phone.word.dictionary_pronunciation[0] in s.STOPS:
+                underlying = phone.word.dictionary_pronunciation[0]
+                stop = Stop(phone.begin, phone.end, underlying+"dl", sentence_path)
+                stop._word_position = "initial"
+                data_dict[underlying].append(stop)
+            else:
+                data_dict[phone.underlying_stop].append(phone)
+        except (KeyError, ValueError):
+            err += 1
+            continue
     return data_dict, err
 
 
-stop_dictionary = {stop:[] for stop in s.STOPS}
+stop_dictionary = {stop:[] for stop in s.STOPS+s.EXTRA_PHONES}
 err = 0
 for dialect_region in os.listdir(s.TIMIT_DIR):
     for speaker in os.listdir(os.path.join(s.TIMIT_DIR, dialect_region)):
@@ -54,14 +65,18 @@ for dialect_region in os.listdir(s.TIMIT_DIR):
         for sentence in sentences:
             new_stop_dict, new_err = extract_wav_files(os.path.join(s.TIMIT_DIR, dialect_region, speaker, sentence))
             err += new_err
-            for stop in s.STOPS:
+            for stop in s.STOPS+s.EXTRA_PHONES:
                 stop_dictionary[stop].extend(new_stop_dict[stop]) 
+
 print("DATA INFO:")
 print([f"{stop}:{len(stop_dictionary[stop])}" for stop in s.STOPS])
-for stop in s.STOPS:
+for stop in s.STOPS+s.EXTRA_PHONES:
     counts = {}
-    for allophone in s.POSSIBLE_ALLOPHONES[stop]:
-        counts[allophone] = len([x for x in stop_dictionary[stop] if x.phone == allophone])
+    if stop in s.STOPS:
+        for allophone in s.POSSIBLE_ALLOPHONES[stop]:
+            counts[allophone] = len([x for x in stop_dictionary[stop] if x.phone == allophone])
+    else:
+        counts = len(stop_dictionary[stop])
     print(f"{stop}:{counts}")
 
 inputlist = os.path.join(s.OUTPUT_DIR, "inputlist")
@@ -69,7 +84,7 @@ outputlist = os.path.join(s.OUTPUT_DIR, "outputlist")
 predictions = os.path.join(s.OUTPUT_DIR, "predictions")
 
 with open(os.path.join(s.OUTPUT_DIR, f"inputlist"), "w") as input_f, open(os.path.join(s.OUTPUT_DIR, f"outputlist"), "w") as output_f:
-    for stop in s.STOPS:
+    for stop in s.STOPS + s.EXTRA_PHONES:
         for i, x in enumerate(stop_dictionary[stop]):
             file_info = "_".join(x.path.split('/')[-3:])
             if x.duration/16000 < 0.03:

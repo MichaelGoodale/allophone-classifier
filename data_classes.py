@@ -104,12 +104,27 @@ class Stop:
         if self._underlying_stop is not None:
             return self._underlying_stop
 
-        if self.phone not in ["q", "dx"]:
+        if self.phone in s.OTHER_PHONES:
+            if self.phone in s.FRICATIVES:
+                self._underlying_stop = "fric"
+            elif self.phone in s.NASALS:
+                self._underlying_stop = "nasal"
+            elif self.phone in s.GLIDES:
+                self._underlying_stop = "glide"
+            elif self.phone in s.VOWELS:
+                self._underlying_stop = "vowel"
+            elif self.phone in s.PAUSE:
+                self._underlying_stop = "pau"
+        elif self.phone not in ["q", "dx"]:
             self._underlying_stop = s.UNDERLYING_STOP[self.phone]
         elif self.phone == "q":
             if len(self.word.actual_pronunciation) != len(self.word.dictionary_pronunciation):
-                raise ValueError(f"Stop, {self} can not be easily mapped to a corresponding stop")
-            self._underlying_stop = "t"
+                if s.INCLUDE_NON_T_Q:
+                    self._underlying_stop = "t+"
+                else:
+                    raise ValueError(f"Stop, {self} can not be easily mapped to a corresponding stop")
+            else:
+                self._underlying_stop = "t"
         elif self.phone == "dx":
             dict_alveolar = [x for x in self.word.dictionary_pronunciation if x in ["t", "d"]]
             actual_alveolar = [x for x in self.word.actual_pronunciation if x[2] in ["t", "d", "q", "dx", "dcl", "drl", "tcl", "trl"]]

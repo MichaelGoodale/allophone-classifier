@@ -7,22 +7,33 @@ TIMIT_DIR = os.path.join(CORPORA_DIRECTORY, "spade-TIMIT", "textgrid-wav")
 OUTPUT_DIR = "data"
 
 PATH_TO_AUTOVOT = "../autovot/autovot/bin"
-STOP_ALLOPHONES = ["b", "d", "g", "p", "t", "k", "bcl", "dcl", "gcl", "pcl", "tcl", "kcl", "dx", "q"]
+
+STOP_ALLOPHONES = ["b", "d", "g", "p", "t", "k", "bcl", "dcl", "gcl", "pcl", "tcl", "kcl", "dx", "q", "bdl", "ddl", "gdl", "pdl", "tdl", "kdl"]
 STOPS = ["b", "d", "g", "p", "t", "k"]
+FRICATIVES = ["s", "sh", "z", "zh", "f", "th", "v", "dh"]
+NASALS = [ "m", "n", "ng", "em", "en", "eng", "nx"]
+GLIDES = ["l", "r", "w", "y", "hh", "hv", "el"]
+VOWELS = ["iy", "ih", "eh", "ey", "ae", "aa", "aw", "ay", "ah", "ao", "oy", "ow", "uh", "uw", "ux", "er", "ax", "ix", "axr", "ax-h" ]
+PAUSE = ["pau"]
+EXTRA_PHONES  = ["t+", "pau", "fric", "nasal", "glide", "vowel"]
+OTHER_PHONES = FRICATIVES+NASALS+GLIDES+VOWELS+PAUSE
 END_FAKE_STOP = (-1, -1, '0', "fakefilepath")
+
 UNDERLYING_STOP = {"b": "b", "bcl": "b", "brl": "b",
         "d": "d", "dcl": "d", "drl": "d",
         "g": "g", "gcl": "g", "grl": "g",
         "p": "p", "pcl": "p", "prl": "p",
         "t": "t", "tcl": "t", "trl": "t",
         "k": "k", "kcl": "k", "krl": "k"}
-POSSIBLE_ALLOPHONES = {"b": ["b", "bcl", "brl"],
-        "d": ["d", "dcl", "drl", "dx"],
-        "g": ["g", "gcl", "grl"],
-        "p": ["p", "pcl", "prl"],
-        "t": ["t", "tcl", "trl", "q", "dx"],
-        "k": ["k", "kcl", "krl"]}
 
+POSSIBLE_ALLOPHONES = {"b": ["b", "bcl", "brl", "bdl"],
+        "d": ["d", "dcl", "drl", "ddl", "dx"],
+        "g": ["g", "gcl", "grl", "gdl"],
+        "p": ["p", "pcl", "prl", "pdl"],
+        "t": ["t", "tcl", "trl", "tdl", "q", "dx"],
+        "k": ["k", "kcl", "krl", "kdl"]}
+
+INCLUDE_NON_T_Q = True
 
 timit_dictionary = {}
 with open('TIMITDIC.TXT', 'r') as f:
@@ -36,4 +47,6 @@ with open('TIMITDIC.TXT', 'r') as f:
             timit_dictionary[word[1:]] = pronounciation.strip('/').split(' ')
         if word.endswith("-"):
             timit_dictionary[word[:-1]] = pronounciation.strip('/').split(' ')
+
+
 
