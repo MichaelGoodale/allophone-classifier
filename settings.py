@@ -26,12 +26,12 @@ UNDERLYING_STOP = {"b": "b", "bcl": "b", "brl": "b",
         "t": "t", "tcl": "t", "trl": "t",
         "k": "k", "kcl": "k", "krl": "k"}
 
-POSSIBLE_ALLOPHONES = {"b": ["b", "bcl", "brl", "bdl"],
-        "d": ["d", "dcl", "drl", "ddl", "dx"],
-        "g": ["g", "gcl", "grl", "gdl"],
-        "p": ["p", "pcl", "prl", "pdl"],
-        "t": ["t", "tcl", "trl", "tdl", "q", "dx"],
-        "k": ["k", "kcl", "krl", "kdl"]}
+POSSIBLE_ALLOPHONES = {"b": ["b", "bcl", "brl"],
+        "d": ["d", "dcl", "drl", "dx"],
+        "g": ["g", "gcl", "grl"],
+        "p": ["p", "pcl", "prl"],
+        "t": ["t", "tcl", "trl", "q", "dx"],
+        "k": ["k", "kcl", "krl"]}
 
 INCLUDE_NON_T_Q = True
 

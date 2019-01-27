@@ -44,13 +44,8 @@ def extract_wav_files(sentence_path):
             continue
     for phone in [x for x in sentence_phones if x.phone in s.OTHER_PHONES]:
         try:
-            if phone.word_position == "initial" and phone.word.dictionary_pronunciation[0] in s.STOPS:
-                underlying = phone.word.dictionary_pronunciation[0]
-                stop = Stop(phone.begin, phone.end, underlying+"dl", sentence_path)
-                stop._word_position = "initial"
-                data_dict[underlying].append(stop)
-            else:
-                data_dict[phone.underlying_stop].append(phone)
+            phone.word
+            data_dict[phone.underlying_stop].append(phone)
         except (KeyError, ValueError):
             err += 1
             continue
