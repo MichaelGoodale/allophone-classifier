@@ -5,12 +5,12 @@ import pandas as pd
 import numpy as np
 import graphviz
 import settings as s
-from sklearn import svm
-from sklearn import tree
+from sklearn import svm, tree
+from sklearn.utils import class_weight
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import OneHotEncoder
-#import keras
-#from keras import layers
+import keras
+from keras import layers
 import matplotlib.pyplot as plt
 
 MINIMUM_CONF = -1000000.0
@@ -45,8 +45,11 @@ if not os.path.isfile(os.path.join(s.OUTPUT_DIR, "dataframe.pkl")):
 else:
     data = pd.read_pickle(os.path.join(s.OUTPUT_DIR, "dataframe.pkl"))
 
-for stop in ["t", "d"]:#s.STOPS:
-    stop_data = data[(data["phoneme"] == stop)]# & (data["word_pos"] == "initial")]
+for stop in ["t", "d"]:
+    stop_data = data[(data["phoneme"] == stop)]
+    o_data = data[(data["phoneme"] == "vowel") | (data["phoneme"] == "nasal") | (data["phoneme"] == "fric")]
+    o_data.loc[(o_data["phoneme"] == "vowel") | (o_data["phoneme"] == "nasal") | (o_data["phoneme"] == "fric"), "allophone"] = "x"
+    stop_data = stop_data.append(o_data[np.random.rand(len(o_data)) < len(stop_data)/2.5/len(o_data)])
     mask = np.random.rand(len(stop_data)) < 0.8
     y, classes = pd.factorize(stop_data.loc[:, "allophone"])
     X = stop_data[["conf", "VOT", "length"]+feature_slice]
@@ -56,22 +59,35 @@ for stop in ["t", "d"]:#s.STOPS:
     train_X = X[mask]
     test_X = X[~mask]
 
+    if stop == "t":
+        n_data = data[(data["phoneme"] == "t+")]
+        n_y = n_data.loc[:, "allophone"].apply(lambda x: np.where(classes==x)[0][0])
+        n_X = n_data[["conf", "VOT", "length"]+feature_slice]
+        train_y = np.concatenate((train_y, n_y))
+        train_X = np.vstack((train_X, n_X))
+        print(train_y.shape)
+        print(train_X.shape)
 
-    clf = tree.DecisionTreeClassifier()
-    clf.fit(train_X, train_y)
+    #clf = tree.DecisionTreeClassifier()
+    #clf.fit(train_X, train_y)
 
-    #train_y = keras.utils.to_categorical(train_y)
-    #model = keras.Sequential()
-    #model.add(layers.Dense(20, activation="relu", input_shape=(3+63*20,)))
-    #model.add(layers.Dense(20, activation="relu"))
-    #model.add(layers.Dense(len(classes), activation="softmax"))
-    #model.compile(loss='binary_crossentropy', optimizer='adam')
-    #model.fit(train_X, train_y, epochs=10, batch_size=32)
-    #pred=np.argmax(model.predict(test_X), axis=1)
+    class_weights = class_weight.compute_class_weight('balanced',
+            np.unique(train_y),
+            train_y)
+    d_class_weights = dict(enumerate(class_weights))
+    train_y = keras.utils.to_categorical(train_y)
+    model = keras.Sequential()
+    model.add(layers.Dense(100, input_shape=(3+63*20,), activation="sigmoid"))
+    model.add(layers.Dropout(0.5))
+    model.add(layers.Dense(25, activation="sigmoid"))
+    model.add(layers.Dense(5, activation="sigmoid"))
+    model.add(layers.Dense(len(classes), activation="softmax"))
+    model.compile(loss='binary_crossentropy', optimizer='adam')
+    model.fit(train_X, train_y, epochs=10, batch_size=32, class_weight=d_class_weights, validation_split=0.1)
+    pred=np.argmax(model.predict(test_X), axis=1)
 
-    pred = clf.predict(test_X)
+    #pred = clf.predict(test_X)
     conf_mat = confusion_matrix(test_y, pred)
-
     plt.imshow(conf_mat, interpolation='nearest', cmap=plt.cm.Blues)
     plt.title(f"Confusion matrix for /{stop}/")
     plt.colorbar()
@@ -79,10 +95,9 @@ for stop in ["t", "d"]:#s.STOPS:
     plt.xticks(tick_marks, classes, rotation=45)
     plt.yticks(tick_marks, classes)
 
-    fmt = 'd'
     thresh = conf_mat.max() / 2.
     for i, j in itertools.product(range(conf_mat.shape[0]), range(conf_mat.shape[1])):
-        plt.text(j, i, format(conf_mat[i, j], fmt),
+        plt.text(j, i, "{0:d}".format(conf_mat[i, j]),
                  horizontalalignment="center",
                  color="white" if conf_mat[i, j] > thresh else "black")
 
