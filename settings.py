@@ -4,6 +4,8 @@ CLASSIFIER = os.path.join("classifier", "classifier")
 
 CORPORA_DIRECTORY = "../corpora"
 TIMIT_DIR = os.path.join(CORPORA_DIRECTORY, "spade-TIMIT", "textgrid-wav")
+SOTC_DIR = os.path.join(CORPORA_DIRECTORY, "spade-SOTC", "audio_and_transcripts")
+SOTC_DIR = os.path.join(CORPORA_DIRECTORY, "spade-Buckeye", "textgrid-wav")
 OUTPUT_DIR = "data"
 
 PATH_TO_AUTOVOT = "../autovot/autovot/bin"
