@@ -1,6 +1,7 @@
 import os 
 import subprocess
 import time
+import numpy as np
 import settings as s
 from data_classes import Stop, same_place
 
@@ -74,32 +75,41 @@ for stop in s.STOPS+s.EXTRA_PHONES:
         counts = len(stop_dictionary[stop])
     print(f"{stop}:{counts}")
 
-inputlist = os.path.join(s.OUTPUT_DIR, "inputlist")
-outputlist = os.path.join(s.OUTPUT_DIR, "outputlist")
-predictions = os.path.join(s.OUTPUT_DIR, "predictions")
+TYPE="specgram"
+if TYPE == "AutoVOT":
+    inputlist = os.path.join(s.OUTPUT_DIR, "inputlist")
+    outputlist = os.path.join(s.OUTPUT_DIR, "outputlist")
+    predictions = os.path.join(s.OUTPUT_DIR, "predictions")
 
-with open(os.path.join(s.OUTPUT_DIR, f"inputlist"), "w") as input_f, open(os.path.join(s.OUTPUT_DIR, f"outputlist"), "w") as output_f:
-    for stop in s.STOPS + s.EXTRA_PHONES:
-        for i, x in enumerate(stop_dictionary[stop]):
-            file_info = "_".join(x.path.split('/')[-3:])
-            if x.duration/16000 < 0.03:
-                buf = 0.03 - (x.duration/16000)
-                alt_begin = max(0, x.begin/16000-buf/2)
-                alt_end = min(x.sentence_length, x.end/16000+buf/2)
-                if (alt_end-alt_begin) < 0.03:
-                    err += 1
-                    continue
-                input_f.write(f"\"{x.path}.WAV\" {alt_begin:3f} {alt_end:3f} {alt_begin:3f} {alt_end:3f} [seconds]\n")
-            else:
-                input_f.write(f"\"{x.path}.WAV\" {x.begin/16000:3f} {x.end/16000:3f} {x.begin/16000:3f} {x.end/16000:3f} [seconds]\n")
+    with open(os.path.join(s.OUTPUT_DIR, f"inputlist"), "w") as input_f, open(os.path.join(s.OUTPUT_DIR, f"outputlist"), "w") as output_f:
+        for stop in s.STOPS + s.EXTRA_PHONES:
+            for i, x in enumerate(stop_dictionary[stop]):
+                file_info = "_".join(x.path.split('/')[-3:])
+                if x.duration/16000 < 0.03:
+                    buf = 0.03 - (x.duration/16000)
+                    alt_begin = max(0, x.begin/16000-buf/2)
+                    alt_end = min(x.sentence_length, x.end/16000+buf/2)
+                    if (alt_end-alt_begin) < 0.03:
+                        err += 1
+                        continue
+                    input_f.write(f"\"{x.path}.WAV\" {alt_begin:3f} {alt_end:3f} {alt_begin:3f} {alt_end:3f} [seconds]\n")
+                else:
+                    input_f.write(f"\"{x.path}.WAV\" {x.begin/16000:3f} {x.end/16000:3f} {x.begin/16000:3f} {x.end/16000:3f} [seconds]\n")
 
-            output_file = os.path.join(s.OUTPUT_DIR, "autovot_files", f"{stop}-{x.phone}-{x.word_position}-{file_info}-{i}")
-            output_f.write(f"{output_file}\n")
+                output_file = os.path.join(s.OUTPUT_DIR, "autovot_files", f"{stop}-{x.phone}-{x.word_position}-{file_info}-{i}")
+                output_f.write(f"{output_file}\n")
 
-print(f"{err} stops excluded in total")
-subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), inputlist, outputlist, "null"])
-subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
+    print(f"{err} stops excluded in total")
+    subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), inputlist, outputlist, "null"])
+    subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
 
-with open(outputlist, "r") as stopnames_f, open(predictions, "r") as pred_f, open(os.path.join(s.OUTPUT_DIR, "real_pred"), "w") as f:
-    for stop, pred in zip(stopnames_f, pred_f):
-        f.write("{} {}".format(" ".join(stop.strip('\n').split('/')[-1].split("-")), pred))
+    with open(outputlist, "r") as stopnames_f, open(predictions, "r") as pred_f, open(os.path.join(s.OUTPUT_DIR, "real_pred"), "w") as f:
+        for stop, pred in zip(stopnames_f, pred_f):
+            f.write("{} {}".format(" ".join(stop.strip('\n').split('/')[-1].split("-")), pred))
+else:
+    for stop in s.STOPS:
+        for i, phone in enumerate(stop_dictionary[stop]):
+            file_info = "_".join(phone.path.split('/')[-3:])
+            output_path = os.path.join(s.OUTPUT_DIR, "filter_bank_files", f"{stop}-{phone.phone}-{phone.word_position}-{file_info}-{i}")
+            np.save(output_path, phone.extract_filter_banks(margin=0.010))
+
