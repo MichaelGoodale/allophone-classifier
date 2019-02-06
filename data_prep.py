@@ -111,5 +111,5 @@ else:
         for i, phone in enumerate(stop_dictionary[stop]):
             file_info = "_".join(phone.path.split('/')[-3:])
             output_path = os.path.join(s.OUTPUT_DIR, "filter_bank_files", f"{stop}-{phone.phone}-{phone.word_position}-{file_info}-{i}")
-            np.save(output_path, phone.extract_filter_banks(margin=0.010))
+            np.save(output_path, phone.extract_filter_banks(margin=0.100))
 

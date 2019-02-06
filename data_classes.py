@@ -137,7 +137,7 @@ class Stop:
 
         return self._underlying_stop
 
-    def extract_filter_banks(self, margin=0, pre_emphasis=0.97, frame_size=0.025, frame_stride=0.01, NFFT=512, nfilt=40):
+    def extract_filter_banks(self, margin=0, pre_emphasis=0.97, frame_size=0.005, frame_stride=0.003, NFFT=512, nfilt=40):
         '''Code adapted from https://haythamfayek.com/2016/04/21/speech-processing-for-machine-learning.html'''
         sample_rate, signal = wavefile.read(f"{self.path}.WAV")
         signal = signal[max(0, self.begin-int(margin*sample_rate)):self.end+int(margin*sample_rate)]
