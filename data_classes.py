@@ -122,7 +122,7 @@ class Stop:
         elif self.phone == "q":
             if len(self.word.actual_pronunciation) != len(self.word.dictionary_pronunciation):
                 if s.INCLUDE_NON_T_Q:
-                    self._underlying_stop = "t+"
+                    self._underlying_stop = "tx"
                 else:
                     raise ValueError(f"Stop, {self} can not be easily mapped to a corresponding stop")
             else:

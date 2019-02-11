@@ -75,7 +75,7 @@ for stop in s.STOPS+s.EXTRA_PHONES:
         counts = len(stop_dictionary[stop])
     print(f"{stop}:{counts}")
 
-TYPE="specgram"
+TYPE="AutoVOT"
 if TYPE == "AutoVOT":
     inputlist = os.path.join(s.OUTPUT_DIR, "inputlist")
     outputlist = os.path.join(s.OUTPUT_DIR, "outputlist")
@@ -85,17 +85,10 @@ if TYPE == "AutoVOT":
         for stop in s.STOPS + s.EXTRA_PHONES:
             for i, x in enumerate(stop_dictionary[stop]):
                 file_info = "_".join(x.path.split('/')[-3:])
-                if x.duration/16000 < 0.03:
-                    buf = 0.03 - (x.duration/16000)
-                    alt_begin = max(0, x.begin/16000-buf/2)
-                    alt_end = min(x.sentence_length, x.end/16000+buf/2)
-                    if (alt_end-alt_begin) < 0.03:
-                        err += 1
-                        continue
-                    input_f.write(f"\"{x.path}.WAV\" {alt_begin:3f} {alt_end:3f} {alt_begin:3f} {alt_end:3f} [seconds]\n")
-                else:
-                    input_f.write(f"\"{x.path}.WAV\" {x.begin/16000:3f} {x.end/16000:3f} {x.begin/16000:3f} {x.end/16000:3f} [seconds]\n")
-
+                buf = 0.05
+                alt_begin = max(0, x.begin/16000-buf/2)
+                alt_end = min(x.sentence_length-0.005, x.end/16000+buf/2)
+                input_f.write(f"\"{x.path}.WAV\" {alt_begin:3f} {alt_end:3f} {alt_begin:3f} {alt_end:3f} [seconds]\n")
                 output_file = os.path.join(s.OUTPUT_DIR, "autovot_files", f"{stop}-{x.phone}-{x.word_position}-{file_info}-{i}")
                 output_f.write(f"{output_file}\n")
 

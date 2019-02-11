@@ -17,7 +17,7 @@ NASALS = [ "m", "n", "ng", "em", "en", "eng", "nx"]
 GLIDES = ["l", "r", "w", "y", "hh", "hv", "el"]
 VOWELS = ["iy", "ih", "eh", "ey", "ae", "aa", "aw", "ay", "ah", "ao", "oy", "ow", "uh", "uw", "ux", "er", "ax", "ix", "axr", "ax-h" ]
 PAUSE = ["pau"]
-EXTRA_PHONES  = ["t+", "pau", "fric", "nasal", "glide", "vowel"]
+EXTRA_PHONES  = ["tx", "pau", "fric", "nasal", "glide", "vowel"]
 OTHER_PHONES = FRICATIVES+NASALS+GLIDES+VOWELS+PAUSE
 END_FAKE_STOP = (-1, -1, '0', "fakefilepath")
 
