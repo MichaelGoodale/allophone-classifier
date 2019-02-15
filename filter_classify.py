@@ -2,7 +2,8 @@ import os
 import sys
 import itertools
 import pickle
-from random import shuffle
+import argparse
+import random 
 from math import ceil
 from time import sleep
 import numpy as np
@@ -20,6 +21,19 @@ PHONEME_TO_TRAIN = "p"
 FEATURE_SIZE=63
 FEATURE_TYPE="AutoVOT"
 
+parser = argparse.ArgumentParser(description='Train allophone classifier')
+parser.add_argument('--phoneme', default=PHONEME_TO_TRAIN, help='Phoneme to train')
+parser.add_argument('--epochs', default=EPOCHS, type=int, help='Number of epochs to train for')
+parser.add_argument('--feature_type', default=FEATURE_TYPE, help='Which feature to use')
+parser.add_argument('--batch_size', default=BATCH_SIZE, type=int, help='Number of batches')
+parser.add_argument('--position', default="no_pos", help='Word position')
+
+args = parser.parse_args()
+BATCH_SIZE = args.batch_size
+EPOCHS = args.epochs
+FEATURE_TYPE = args.feature_type
+POSITION = args.position
+PHONEME_TO_TRAIN = args.phoneme
 
 def evaluate_model(truth, predictions, classes):
     conf_mat = confusion_matrix(truth, predictions)
@@ -40,6 +54,8 @@ def evaluate_model(truth, predictions, classes):
     plt.xlabel('Predicted label')
     plt.tight_layout()
     plt.show()
+    
+    print(conf_mat)
 
 def calculate_z_score(data, feature_size=FEATURE_SIZE):
     feats = np.empty((0, feature_size))
@@ -76,18 +92,24 @@ elif FEATURE_TYPE == "AutoVOT":
     file_dir = os.path.join(s.OUTPUT_DIR, "autovot_files")
 else:
     raise KeyError("Invalid FEATURE_TYPE")
+
+rand = random.Random(69)
+
 for phone in os.listdir(file_dir):
-    phone = phone.replace("ax-h", "ax_h")
-    phoneme, allophone, pos, path, phone_id = phone.split("-")
-
-    #if pos != "initial":
-    #    continue
-
-    if phoneme == "t+":
-        phoneme = "t"
-
-    if phoneme != PHONEME_TO_TRAIN:
+    if "ax-h" in phone:
         continue 
+    phoneme, allophone, pos, path, phone_id = phone.split("-")
+    if phoneme in s.EXTRA_PHONES and rand.random() < 0.25:
+        allophone = "other"
+    else:
+        if POSITION != "no_pos" and pos != POSITION:
+            continue
+
+        if phoneme == "t+":
+            phoneme = "t"
+
+        if phoneme != PHONEME_TO_TRAIN:
+            continue 
 
     if FEATURE_TYPE == "specgram":
         x = np.load(os.path.join(file_dir, phone))
@@ -116,7 +138,7 @@ print("Data Z_Scored")
 train_data = {}
 test_data = {}
 for l in data:
-    shuffle(data[l])
+    rand.shuffle(data[l])
     train_data[l] = data[l][:int(len(data[l])*TEST_SPLIT)]
     test_data[l] = data[l][int(len(data[l])*TEST_SPLIT):]
 
