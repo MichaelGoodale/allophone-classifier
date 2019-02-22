@@ -85,9 +85,8 @@ if TYPE == "AutoVOT":
         for stop in s.STOPS + s.EXTRA_PHONES:
             for i, x in enumerate(stop_dictionary[stop]):
                 file_info = "_".join(x.path.split('/')[-3:])
-                buf = 0.05
-                alt_begin = max(0, x.begin/16000-buf/2)
-                alt_end = min(x.sentence_length-0.005, x.end/16000+buf/2)
+                alt_begin = max(0, x.begin/16000-(s.WINDOW_BEFORE/1000))
+                alt_end = min(x.sentence_length-0.005, x.end/16000+(s.WINDOW_AFTER/1000))
                 input_f.write(f"\"{x.path}.WAV\" {alt_begin:3f} {alt_end:3f} {alt_begin:3f} {alt_end:3f} [seconds]\n")
                 output_file = os.path.join(s.OUTPUT_DIR, "autovot_files", f"{stop}-{x.phone}-{x.word_position}-{file_info}-{i}")
                 output_f.write(f"{output_file}\n")

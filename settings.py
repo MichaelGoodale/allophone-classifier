@@ -35,6 +35,9 @@ POSSIBLE_ALLOPHONES = {"b": ["b", "bcl", "brl"],
         "t": ["t", "tcl", "trl", "q", "dx"],
         "k": ["k", "kcl", "krl"]}
 
+WINDOW_BEFORE = 50
+WINDOW_AFTER = 250
+
 INCLUDE_NON_T_Q = True
 
 timit_dictionary = {}
