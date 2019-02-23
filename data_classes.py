@@ -6,7 +6,6 @@ import settings as s
 
 
 phoneme_phone_mappings = {}
-phonemes = set()
 
 with open('wrdalign.timit', 'r') as f:
     for line in f:
@@ -27,7 +26,6 @@ with open('wrdalign.timit', 'r') as f:
             else:
                 data = (phoneme, phone, distance, stress, boundary, word)
                 phoneme_phone_mappings[(dialect, speaker, sentence)].append(data)
-            phonemes.add(phoneme)
 
 def same_place(closure, release):
     '''Takes two strings representing different phonemes and checks 
