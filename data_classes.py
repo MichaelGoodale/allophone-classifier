@@ -50,6 +50,8 @@ class Sentence:
         self.phone_list = []
 
         sentence_path = os.path.join(s.TIMIT_DIR, self.dialect, self.speaker, self.sentence_id)
+        DEL_PHONE_OFFSET = int((25/1000)*16000)
+
         with open(sentence_path+".PHN", "r") as f:
             pron_list = []
             i = 0
@@ -61,7 +63,11 @@ class Sentence:
                     continue
 
                 while i < len(temp_phone_list) and temp_phone_list[i][1] == '-':
-                    pron_list.append((-1, -1, "-"))
+                    if len(pron_list) > 0:
+                        old_begin, old_end, _ = pron_list[-1]
+                        pron_list.append((int(old_begin)+DEL_PHONE_OFFSET, int(old_end)+DEL_PHONE_OFFSET, "-"))
+                    else:
+                        pron_list.append((0, DEL_PHONE_OFFSET, "-"))
                     i += 1
                 pron_list.append((begin, end, phone))
                 i += 1
