@@ -1,141 +1,113 @@
+import os
 import subprocess
 import numpy as np
 import scipy.io.wavfile as wavefile
 import settings as s
+
+
+phoneme_phone_mappings = {}
+phonemes = set()
+
+with open('wrdalign.timit', 'r') as f:
+    for line in f:
+        if line.startswith("# "):
+            continue
+        elif line.startswith("#"):
+            _, dialect, speaker, sentence = line.strip("\n").split("/")
+            phoneme_phone_mappings[(dialect, speaker, sentence)] = []
+        else:
+            if line.count('\t') == 5:
+                phoneme, phone, distance, stress, boundary, word = line.strip("\n").split("\t")
+            else:
+                phoneme, phone, distance, stress, boundary = line.strip("\n").split("\t")
+            if phone == "+":
+                old_phoneme, old_phone, old_distance, old_stress, old_boundary, word = phoneme_phone_mappings[(dialect, speaker, sentence)][-1]
+                phoneme = f"{old_phoneme}_{phoneme}"
+                phoneme_phone_mappings[(dialect, speaker, sentence)][-1] = (phoneme, old_phone, old_distance, old_stress, old_boundary, word)
+            else:
+                data = (phoneme, phone, distance, stress, boundary, word)
+                phoneme_phone_mappings[(dialect, speaker, sentence)].append(data)
+            phonemes.add(phoneme)
 
 def same_place(closure, release):
     '''Takes two strings representing different phonemes and checks 
        if they make a valid closure release combination, e.g. bcl and b, dcl and d'''
     return closure[0] == release
 
-class Word:
+def get_associated_phones(dialect, speaker, sentence_id):
+    dialect = dialect.lower()
+    speaker = speaker.lower()
+    sentence_id = sentence_id.lower()
+    return phoneme_phone_mappings[(dialect, speaker, sentence_id)]
 
-    def __init__(self, stop):
-        self.stop = stop
+class Sentence:
 
-        found_word = False
-        with open(self.stop.path+".WRD", "r") as f:
-            for line in f:
-                (begin, end, word) = line.strip('\n').split(' ')
-                (begin, end) = (int(begin), int(end))
-                if begin <= self.stop.begin <= self.stop.end <= end:
-                    found_word = True
-                    break
-        if not found_word:
-            raise KeyError(f"Stop, {self.stop} is not in any of the associated words")
+    def __init__(self, dialect, speaker, sentence_id):
+        self.dialect = dialect
+        self.speaker = speaker
+        self.sentence_id = sentence_id
+        temp_phone_list = get_associated_phones(dialect, speaker, sentence_id)
+        self.phone_list = []
 
-        self.begin = begin
-        self.end = end
-        self.dictionary_pronunciation = s.timit_dictionary[word]
-        self._actual_pronunciation = None
-
-    @property
-    def actual_pronunciation(self):
-        if self._actual_pronunciation is not None:
-            return self._actual_pronunciation
-
-        actual_pron_raw = []
-        with open(self.stop.path+".PHN", "r") as f:
+        sentence_path = os.path.join(s.TIMIT_DIR, self.dialect, self.speaker, self.sentence_id)
+        with open(sentence_path+".PHN", "r") as f:
+            pron_list = []
+            i = 0
             for line in f:
                 (begin, end, phone) = line.strip('\n').split(' ')
                 (begin, end) = (int(begin), int(end))
-                if self.begin <= begin <= end <= self.end:
-                    actual_pron_raw.append((begin, end, phone))
+                if len(pron_list) == 1 and phone == "pau":
+                    pron_list[0] = (pron_list[0][0], pron_list[0][1], end)
+                    continue
 
-        combined_stop = False
-        actual_pron = []
-        for phone, next_phone in zip(actual_pron_raw, actual_pron_raw[1:]+[(-1, -1, "x")]):
-            #Combine split stops/affricates
-            if combined_stop:
-                combined_stop = False
-                continue
-            elif next_phone[2] in ["ch", "jh"] or same_place(phone[2], next_phone[2]):
-                combined_stop = True
-                actual_pron.append((phone[0], next_phone[1], phone[2][0]+"rl"))
+                while i < len(temp_phone_list) and temp_phone_list[i][1] == '-':
+                    pron_list.append((-1, -1, "-"))
+                    i += 1
+                pron_list.append((begin, end, phone))
+                i += 1
+        if len(pron_list) != len(temp_phone_list):
+            raise ValueError(f"Pron list does not match phone list in {self.dialect}/{self.speaker}/{self.sentence}")
+
+        for (begin, end, phone), (phoneme, _, distance, stress, boundary, word) in zip(pron_list, temp_phone_list):
+            if phoneme == "+":
+                old_phone = self.phone_list[-1]
+                self.phone_list[-1] = Phone(old_phone.begin, end, phone+"rl", old_phone.underlying_phoneme, word, \
+                        old_phone.stress, old_phone.boundary, sentence_path)
             else:
-                actual_pron.append(phone)
-        self._actual_pronunciation = actual_pron
-        return self._actual_pronunciation
+                self.phone_list.append(Phone(begin, end, phone, phoneme, word, stress, boundary, sentence_path))
 
+class Phone:
 
-
-class Stop:
-
-    def __init__(self, begin, end, phone, path):
+    def __init__(self, begin, end, phone, underlying_phoneme, word, stress, boundary, path):
         self.begin = int(begin)
         self.end = int(end)
         self.phone = phone
         self.path = path
-        self._word = None
-        self._word_position = None
-        self._underlying_stop = None
+        self.word = word
+        self.underlying_phoneme = underlying_phoneme
+        self.stress = stress
+        self.boundary = boundary
 
     @property
     def duration(self):
         return self.end-self.begin
 
     @property
+    def window_begin(self):
+        '''Begin of audio window in seconds'''
+        return max(0, self.begin/16000-(s.WINDOW_BEFORE/1000))
+
+    @property
+    def window_end(self):
+        '''Begin of audio end in seconds'''
+        return min(self.sentence_length-0.005, self.end/16000+(s.WINDOW_AFTER/1000))
+
+    @property
     def sentence_length(self):
         return float(subprocess.check_output(["soxi", "-D", self.path+".WAV"]))
 
-
-    @property
-    def word(self):
-        if self._word is not None:
-            return self._word
-        self._word = Word(self)
-        return self._word
-
-    @property
-    def word_position(self):
-        if self._word_position is not None:
-            return self._word_position
-        for i, (begin, end, phone) in enumerate(self.word.actual_pronunciation):
-            if begin == self.begin and end == self.end:
-                break
-        if i == 0:
-            self._word_position = "initial"
-        elif i == len(self.word.actual_pronunciation) - 1:
-            self._word_position = "final"
-        else:
-            self._word_position = "medial"
-        return self._word_position
-
-    @property
-    def underlying_stop(self):
-        if self._underlying_stop is not None:
-            return self._underlying_stop
-
-        if self.phone in s.OTHER_PHONES:
-            if self.phone in s.FRICATIVES:
-                self._underlying_stop = "fric"
-            elif self.phone in s.NASALS:
-                self._underlying_stop = "nasal"
-            elif self.phone in s.GLIDES:
-                self._underlying_stop = "glide"
-            elif self.phone in s.VOWELS:
-                self._underlying_stop = "vowel"
-            elif self.phone in s.PAUSE:
-                self._underlying_stop = "pau"
-        elif self.phone not in ["q", "dx"]:
-            self._underlying_stop = s.UNDERLYING_STOP[self.phone]
-        elif self.phone == "q":
-            if len(self.word.actual_pronunciation) != len(self.word.dictionary_pronunciation):
-                if s.INCLUDE_NON_T_Q:
-                    self._underlying_stop = "tx"
-                else:
-                    raise ValueError(f"Stop, {self} can not be easily mapped to a corresponding stop")
-            else:
-                self._underlying_stop = "t"
-        elif self.phone == "dx":
-            dict_alveolar = [x for x in self.word.dictionary_pronunciation if x in ["t", "d"]]
-            actual_alveolar = [x for x in self.word.actual_pronunciation if x[2] in ["t", "d", "q", "dx", "dcl", "drl", "tcl", "trl"]]
-            if len(actual_alveolar) != len(dict_alveolar):
-                raise ValueError(f"Stop, {self} can not be easily mapped to a corresponding stop")
-            stop_idx = [i for i, x in enumerate(actual_alveolar) if x[0] == self.begin and x[1] == self.end][0]
-            self._underlying_stop = dict_alveolar[stop_idx]
-
-        return self._underlying_stop
+    def __repr__(self):
+        return f"/{self.underlying_phoneme}/,[{self.phone}],{self.begin},{self.end}"
 
     def extract_filter_banks(self, margin=0, pre_emphasis=0.97, frame_size=0.005, frame_stride=0.003, NFFT=512, nfilt=40):
         '''Code adapted from https://haythamfayek.com/2016/04/21/speech-processing-for-machine-learning.html'''
@@ -183,5 +155,3 @@ class Stop:
         filter_banks = 20 * np.log10(filter_banks)  # dB
         filter_banks -= (np.mean(filter_banks, axis=0) + 1e-8)
         return filter_banks
-
-
