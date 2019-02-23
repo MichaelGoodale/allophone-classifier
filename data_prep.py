@@ -49,4 +49,12 @@ with open(predictions) as pred_f:
         phone_dictionaries[i]["vot_conf"] = vot_conf
         phone_dictionaries[i]["vot_begin"] = vot_begin
         phone_dictionaries[i]["vot_end"] = vot_end
-        matrix = phone_dictionaries[i]["vot_file"]
+        matrix = np.nan_to_num(np.genfromtxt(phone_dictionaries[i]["vot_file"], skip_header=1, filling_values=0))
+        matrix_file = os.path.join(numpy_output, f"{i}.npy")
+        np.save(matrix_file, matrix)
+        phone_dictionaries[i]["numpy_X"] = matrix_file
+
+with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "w") as csvfile:
+    writer = csv.DictWriter(csvfile, fieldnames=phone_dictionaries[0].keys())
+    writer.writeheader()
+    writer.writerows(phone_dictionaries)
