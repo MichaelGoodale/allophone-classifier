@@ -3,6 +3,7 @@ import csv
 import sys
 import subprocess
 import time
+import datetime
 import numpy as np
 import settings as s
 from data_classes import Phone, same_place, Sentence
@@ -18,7 +19,7 @@ def get_glottal_features(path):
 
     os.chdir("../opensauce-python")
     subprocess.run(["python", "-m", "opensauce", path, "--praat-path", PRAAT_PATH, \
-            "--no-textgrid", "--use-pyreaper"\
+            "--no-textgrid", "--use-pyreaper", \
             "--measurements"] + OPENSAUCE_FEATURES + ["-o", "temp_out"])
     X = np.genfromtxt("temp_out", skip_header=1)[:, 1:]
     glottal_features_memo[path] = X
@@ -41,8 +42,6 @@ numpy_output = os.path.join(s.OUTPUT_DIR, "timit_matrices")
 phone_dictionaries = []
 with open(inputlist, "w") as input_f, open(outputlist, "w") as output_f:
     for i, x in enumerate(phones):
-        if i > 10000:
-            break
         input_f.write(f"\"{x.path}.WAV\" {x.window_begin:3f} {x.window_end:3f} {x.window_begin:3f} {x.window_end:3f} [seconds]\n")
         output_path = os.path.join(s.OUTPUT_DIR, "autovot_files", f"{i}")
         output_f.write(output_path+"\n")
@@ -57,6 +56,8 @@ with open(inputlist, "w") as input_f, open(outputlist, "w") as output_f:
             "window_begin":x.window_begin,
             "window_end":x.window_end,
             "vot_file":output_path})
+        if i % 1000 == 0:
+            print(f"{datetime.datetime.now()}  {i}/{len(phones)}")
 
 subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), inputlist, outputlist, "null"])
 subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
@@ -84,6 +85,8 @@ with open(predictions) as pred_f:
         matrix = np.hstack((matrix, X))
         np.save(matrix_file, matrix)
         phone_dictionaries[i]["numpy_X"] = matrix_file
+        if i % 1000 == 0:
+            print(f"{datetime.datetime.now()}  {i}/{len(phones)}")
 print(f"{err} stops excluded")
 with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "w") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=phone_dictionaries[0].keys())

@@ -81,6 +81,7 @@ class Sentence:
                 self.phone_list.append(Phone(begin, end, phone, phoneme, word, stress, boundary, sentence_path))
 
 class Phone:
+    lengths = {}
 
     def __init__(self, begin, end, phone, underlying_phoneme, word, stress, boundary, path):
         self.begin = int(begin)
@@ -108,7 +109,10 @@ class Phone:
 
     @property
     def sentence_length(self):
-        return float(subprocess.check_output(["soxi", "-D", self.path+".WAV"]))
+        if self.path in Phone.lengths:
+            return Phone.lengths[self.path]
+        Phone.lengths[self.path] = float(subprocess.check_output(["soxi", "-D", self.path+".WAV"]))
+        return Phone.lengths[self.path]
 
     def __repr__(self):
         return f"/{self.underlying_phoneme}/,[{self.phone}],{self.begin},{self.end}"
