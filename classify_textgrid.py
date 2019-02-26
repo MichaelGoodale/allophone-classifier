@@ -99,15 +99,25 @@ def get_features(phone_list):
         job.join()
 
 input_phones = []
+phone_labels = []
 with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "r") as csvfile:
     reader = csv.DictReader(csvfile)
     for i, row in enumerate(reader): 
-        if i > 23:
+        if i > 100:
             break
         input_phones.append((float(row["window_begin"]), float(row["window_end"]), row["path"]+".WAV", i))
+        phone_labels.append(row["phone"])
 get_features(input_phones)
 print("Feature extraction completed")
 model = load_model("outputmodel.hd5")
-for _, _, _, phone_id in input_phones:
+
+z_scores = np.load(os.path.join(s.OUTPUT_DIR, "zscores.npy"))
+z_scores = np.hstack((z_scores,[[88.0977, 30.28, 447],
+                        [515.34, 43.5, 75.344]]))
+LABELS = ["t", "trl", "tcl", "-", "dx", "q", "other"]
+print("pred truth")
+for phone, (_, _, _, phone_id) in zip(phone_labels, input_phones):
     X = np.load(os.path.join(NUMPY_MATRICES, f"{phone_id}.npy"))
-    print(model.predict(X[None, ...]))
+    X = (np.nan_to_num(X) - z_scores[0])/z_scores[1]
+    pred = model.predict(X[None, ...])
+    print(phone, pred)
