@@ -27,9 +27,10 @@ def get_glottal_features(path):
     return X
 
 phones = []
-for dialect_region in os.listdir(s.TIMIT_DIR):
-    for speaker in os.listdir(os.path.join(s.TIMIT_DIR, dialect_region)):
+for dialect_region in sorted(os.listdir(s.TIMIT_DIR)):
+    for speaker in sorted(os.listdir(os.path.join(s.TIMIT_DIR, dialect_region))):
         sentences = set(x.split('.')[0] for x in os.listdir(os.path.join(s.TIMIT_DIR, dialect_region, speaker)))
+        sentences = sorted(list(sentences))
         for sentence in sentences:
             sentence = Sentence(dialect_region, speaker, sentence)
             phones += sentence.phone_list

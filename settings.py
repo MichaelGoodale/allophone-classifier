@@ -10,7 +10,7 @@ OUTPUT_DIR = "data"
 
 PATH_TO_AUTOVOT = "../autovot/autovot/bin"
 
-STOP_ALLOPHONES = ["b", "d", "g", "p", "t", "k", "bcl", "dcl", "gcl", "pcl", "tcl", "kcl", "dx", "q", "bdl", "ddl", "gdl", "pdl", "tdl", "kdl"]
+STOP_ALLOPHONES = ["b", "d", "g", "p", "t", "k", "bcl", "dcl", "gcl", "pcl", "tcl", "kcl", "dx", "q", "brl", "drl", "grl", "prl", "trl", "krl"]
 STOPS = ["b", "d", "g", "p", "t", "k"]
 FRICATIVES = ["s", "sh", "z", "zh", "f", "th", "v", "dh"]
 NASALS = [ "m", "n", "ng", "em", "en", "eng", "nx"]

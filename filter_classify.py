@@ -17,10 +17,11 @@ import matplotlib.pyplot as plt
 
 BATCH_SIZE = 32
 TEST_SPLIT = 0.8
-MIN_LENGTH = 9
+MIN_LENGTH = 50
 EPOCHS = 10
 PHONEME_TO_TRAIN = "t"
-FEATURE_SIZE=85
+FEATURE_SIZE=88
+SLICE=200
 FEATURE_TYPE="AutoVOT"
 TEST_SPEAKERS = [ "DAB0", "WBT0", "ELC0", "TAS1", "WEW0", "PAS0", "JMP0", "LNT0", 
                   "PKT0", "LLL0", "TLS0", "JLM0", "BPM0", "KLT0", "NLP0", "CMJ0",
@@ -88,17 +89,23 @@ def data_generator(data, batch_size=BATCH_SIZE, do_shuffle=False, sample_weight=
         if do_shuffle:
             rand.shuffle(length_order)
         for length in length_order:
+            if length - SLICE < MIN_LENGTH:
+                continue
             if do_shuffle:
-                rand.shuffle(data[length])
-            for position in range(0, len(data[length]), batch_size):
+                new_data_list = rand.sample(data[length], len(data[length]))
+            else:
+                new_data_list = data[length]
+            for position in range(0, len(new_data_list), batch_size):
                 batch_x = []
                 batch_y = []
                 batch_sample_weights = []
-                for phone in data[length][position:position+batch_size]:
+                for phone in new_data_list[position:position+batch_size]:
                     if phone["x_path"] not in path_cache:
                         phone_x = np.nan_to_num(np.load(phone["x_path"]))
                         phone_x = (phone_x - z_scores[0])/z_scores[1]
-                        phone_x = phone_x[:, :FEATURE_SIZE]
+                        phone_x = phone_x[:, :FEATURE_SIZE-3]
+                        phone_x = np.insert(phone_x, FEATURE_SIZE-3, [[row["vot_conf"]], [row["vot_begin"]], [row["vot_end"]]], axis=1)
+                        phone_x = phone_x[:-SLICE, :]
                         path_cache[phone["x_path"]] = phone_x
                     else:
                         phone_x = path_cache[phone["x_path"]]
@@ -168,32 +175,41 @@ def sotc_generator():
 data = {}
 allophone_mapping = {}
 
+LABELS = ["t", "trl", "tcl", "-", "dx", "q", "other"]
+ALLOPHONE_CLASSES = {
+        "trl":"trl",
+        "t":"t",
+        "tcl":"tcl",
+        "-":"-",
+        "dx":"dx",
+        "nx":"dx",
+        "q":"q"
+        }
+VALID_PHONEMES = ["t", "n_t", "t_y"]
 with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "r") as csvfile:
     reader = csv.DictReader(csvfile)
     for i, row in enumerate(reader):
         if i % 50000 == 0:
             print(f"{i}/224017")
         phoneme = row["phoneme"].lower()
-        if not PHONEME_TO_TRAIN in phoneme and row["phone"] != "q" and row["phone"] != "nx":
-            continue
-        if row["phone"] in ["qrl", "drl", "d", "dcl"]:
+
+        if phoneme not in VALID_PHONEMES and row["phone"] != "q":
             continue
 
-
-        if row["boundary"] == 3 or row["boundary"] == 2:
+        if row["boundary"] == "3" or row["boundary"] == "2":
             pos = "initial"
-        elif row["boundary"] == 1:
+        elif row["boundary"] == "1":
             pos = "syllable"
         else:
             pos = "medial"
 
         if POSITION != "no_pos" and pos != POSITION:
             continue 
-        x = np.nan_to_num(np.load(row["numpy_X"]))
 
         allophone = row["phone"]
         if allophone not in allophone_mapping:
             allophone_mapping[allophone] = len(allophone_mapping)
+        x = np.nan_to_num(np.load(row["numpy_X"]))
 
         length = x.shape[0]
         if length not in data:
@@ -202,19 +218,19 @@ with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "r") as csvfile:
         data[length].append({
             "allophone":allophone,
             "position":pos,
+            "vot_conf":(float(row["vot_conf"])-88.0977)/515.34,
+            "vot_begin":(float(row["vot_begin"])-30.28)/43.5,
+            "vot_end":(float(row["vot_end"])-68.447)/75.344,
             "phoneme":phoneme,
             "x_path":row["numpy_X"],
             "speaker":row["path"].split("/")[-2][1:],
             })
 print("Data generated")
-LABELS = ['-', 'trl', 'tcl', 't', 'q', 'dx']
 for k, v in allophone_mapping.items():
-    if k not in LABELS:
-        allophone_mapping[k]=len(LABELS)
-        if k == "qrl":
-            allophone_mapping[k] = allophone_mapping["q"]
-        if k == "nx":
-            allophone_mapping[k] = allophone_mapping["dx"]
+    if k not in ALLOPHONE_CLASSES:
+        allophone_mapping[k] = LABELS.index("other")
+    else:
+        allophone_mapping[k]=LABELS.index(ALLOPHONE_CLASSES[k])
 train_data = {}
 test_data = {}
 numbers_test = {k:0 for k in allophone_mapping.values()}
@@ -242,13 +258,16 @@ for l in train_data:
         train_sample_weights[allophone_mapping[x["allophone"]]] += 1
         total += 1
 for k, v in train_sample_weights.items():
-    x = np.log(total/v)
+    if v != 0:
+        x = np.log(total/v)
+    else:
+        x = 1.0
     train_sample_weights[k] = x if x > 1.0 else 1.0
 print(train_sample_weights)
 
 def new_model():
     model = keras.Sequential()
-    model.add(layers.GaussianNoise(0.1, input_shape=(None, FEATURE_SIZE)))
+    model.add(layers.GaussianNoise(0.3, input_shape=(None, FEATURE_SIZE)))
     model.add(layers.Conv1D(256, 5, activation="relu", kernel_regularizer=regularizers.l2(0.001)))
     model.add(layers.Dropout(0.1))
     model.add(layers.MaxPooling1D(5))
@@ -268,8 +287,8 @@ adam = keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=None, 
 model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=["categorical_accuracy"])
 model.summary()
 print("Model compiled")
-train_size = sum([ceil(len(v)/BATCH_SIZE) for length, v in train_data.items() if length > MIN_LENGTH])
-validation_size = sum([ceil(len(v)/BATCH_SIZE) for length, v in test_data.items() if length > MIN_LENGTH])
+train_size = sum([ceil(len(v)/BATCH_SIZE) for length, v in train_data.items() if length - SLICE > MIN_LENGTH])
+validation_size = sum([ceil(len(v)/BATCH_SIZE) for length, v in test_data.items() if length - SLICE > MIN_LENGTH])
 print("Sizes calculated")
 y_s = []
 for i, (x, y) in enumerate(data_generator(test_data)):
@@ -277,28 +296,9 @@ for i, (x, y) in enumerate(data_generator(test_data)):
         break
     y_s.append(y)
 test_y = np.vstack(y_s)
-classes = LABELS+["other"]
-history = model.fit_generator(data_generator(train_data, do_shuffle=True, sample_weight=True), steps_per_epoch=train_size,\
-            validation_data=data_generator(test_data, do_shuffle=True), validation_steps=validation_size, epochs=EPOCHS)
+history = model.fit_generator(data_generator(train_data, do_shuffle=True, sample_weight=False), steps_per_epoch=train_size,\
+            validation_data=data_generator(test_data), validation_steps=validation_size, epochs=EPOCHS)
+model.save("outputmodel.hd5")
 plot_history(history)
 pred = model.predict_generator(data_generator(test_data), validation_size)
-evaluate_model(np.argmax(test_y, axis=1), np.argmax(pred, axis=1), classes)
-#sotc_dir = os.path.join(s.OUTPUT_DIR, "autovot_files_sotc")
-#y_s = []
-#for phone in os.listdir(sotc_dir):
-#    try:
-#        phoneme, measurable, type_of_measure, phone_id= phone.split("-")
-#    except:
-#        continue
-#    if phoneme != PHONEME_TO_TRAIN:
-#        continue
-#    if measurable == "yes":
-#        y_s.append(1)
-#    else:
-#        y_s.append(0)
-#test_y = np.vstack(y_s)
-#steps = sotc_size()
-#pred = model.predict_generator(sotc_generator(), steps=steps)
-#evaluate_model(test_y, (pred > 0.25).astype(int), classes)
-#evaluate_model(test_y, (pred > 0.5).astype(int), classes)
-#evaluate_model(test_y, (pred > 0.75).astype(int), classes)
+evaluate_model(np.argmax(test_y, axis=1), np.argmax(pred, axis=1), LABELS)

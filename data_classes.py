@@ -30,7 +30,7 @@ with open('wrdalign.timit', 'r') as f:
 def same_place(closure, release):
     '''Takes two strings representing different phonemes and checks 
        if they make a valid closure release combination, e.g. bcl and b, dcl and d'''
-    return closure[0] == release
+    return closure[0] == release and closure.endswith("cl")
 
 def get_associated_phones(dialect, speaker, sentence_id):
     dialect = dialect.lower()
@@ -75,7 +75,11 @@ class Sentence:
         for (begin, end, phone), (phoneme, _, distance, stress, boundary, word) in zip(pron_list, temp_phone_list):
             if phoneme == "+":
                 old_phone = self.phone_list[-1]
-                self.phone_list[-1] = Phone(old_phone.begin, end, phone+"rl", old_phone.underlying_phoneme, word, \
+                if same_place(old_phone.phone, phone):
+                    newphone = f"{phone}rl"
+                else:
+                    newphone = f"{old_phone.phone}_{phone}"
+                self.phone_list[-1] = Phone(old_phone.begin, end, newphone, old_phone.underlying_phoneme, word, \
                         old_phone.stress, old_phone.boundary, sentence_path)
             else:
                 self.phone_list.append(Phone(begin, end, phone, phoneme, word, stress, boundary, sentence_path))
