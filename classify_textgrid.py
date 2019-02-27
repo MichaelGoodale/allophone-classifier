@@ -6,6 +6,7 @@ import numpy as np
 from keras.models import load_model
 import argparse 
 import subprocess
+from uuid import uuid1
 import multiprocessing
 import itertools
 import settings as s
@@ -20,25 +21,29 @@ OPENSAUCE_FEATURES = ["snackF0", "praatF0", "shrF0", "reaperF0", "snackFormants"
 INPUTLIST = os.path.join(TEMP_DIR, "inputlist")
 OUTPUTLIST = os.path.join(TEMP_DIR, "outputlist")
 PREDICTIONS = os.path.join(TEMP_DIR, "predictions")
+AUDIO_DIR = os.path.join(TEMP_DIR, "audio")
 VOT_DIR = os.path.join(TEMP_DIR, "autovot_files")
 NUMPY_MATRICES = os.path.join(TEMP_DIR, "numpy_matrices")
 
-for path in [VOT_DIR, NUMPY_MATRICES]:
+for path in [VOT_DIR, NUMPY_MATRICES, AUDIO_DIR]:
     if not os.path.exists(path):
         os.makedirs(path)
 
+def extract_segment(path, begin, end):
+    output_path = os.path.abspath(os.path.join(AUDIO_DIR, f"{uuid1()}.wav"))
+    subprocess.run(["sox", path, output_path, "trim", str(begin), str(end-begin+0.01)])
+    return output_path
+    
 
-def get_glottal_features(path, memo, output_name):
-    if path in memo:
-        return memo[path]
+
+def get_glottal_features(path, output_name):
+
     orig_dir = os.getcwd()
-
     os.chdir("../opensauce-python")
     subprocess.run(["python", "-m", "opensauce", path, "--praat-path", PRAAT_PATH, \
             "--no-textgrid", "--use-pyreaper", \
             "--measurements"] + OPENSAUCE_FEATURES + ["-o", output_name])
     X = np.genfromtxt(output_name, skip_header=1)[:, 1:]
-    memo[path] = X
     os.chdir(orig_dir)
     return X
 
@@ -56,16 +61,13 @@ def _calculate_features(i, phone_list):
     subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), inputlist, outputlist, "null"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    memo = {}
     with open(predictions) as pred_f:
         for (begin, end, path, phone_id), line in zip(phone_list, pred_f):
             vot_conf, vot_begin, vot_end = line.split()
             matrix = np.genfromtxt(os.path.join(VOT_DIR, str(phone_id)), skip_header=1)
             matrix_file = os.path.join(NUMPY_MATRICES, f"{phone_id}.npy")
 
-            begin_ms = int(begin*1000)
-            end_ms = int(end*1000)
-            X = get_glottal_features(path, memo, f"output_{i}")[begin_ms:end_ms+1]
+            X = get_glottal_features(extract_segment(path, begin, end), f"output_{i}")
 
             if X.shape[0] > matrix.shape[0]:
                 X = X[:matrix.shape[0]]
@@ -73,6 +75,7 @@ def _calculate_features(i, phone_list):
             matrix = np.hstack((matrix, X))
             matrix = np.insert(matrix, 85, [[vot_conf], [vot_begin], [vot_end]], axis=1)
             np.save(matrix_file, matrix)
+            print(phone_id)
 
 def get_features(phone_list):
     '''Takes in a list of 4-tuples formatted with input, output, path and phone_id'''
@@ -100,13 +103,31 @@ def get_features(phone_list):
 
 input_phones = []
 phone_labels = []
-with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "r") as csvfile:
-    reader = csv.DictReader(csvfile)
-    for i, row in enumerate(reader): 
-        if i > 100:
-            break
-        input_phones.append((float(row["window_begin"]), float(row["window_end"]), row["path"]+".WAV", i))
-        phone_labels.append(row["phone"])
+phone_id = 0
+phones = set()
+for directory in os.listdir(s.BUCKEYE_DIR):
+    for phone_file in [x for x in os.listdir(os.path.join(s.BUCKEYE_DIR, directory)) if x.endswith("phones")]:
+        path = os.path.join(s.BUCKEYE_DIR, directory, phone_file)
+        phone = "begin_of_file"
+        time = 0 
+        with open(path, 'r') as f:
+            for line in f:
+                if not line.startswith(' '):
+                    continue
+                line = line.split(';')[0]
+                line = line.strip() 
+                while '  ' in line:
+                    line = line.replace('  ', ' ')
+                old_time, old_phone = time, phone
+                time, _, phone = line.split(' ')
+                time = float(time)
+                if old_phone in ["tq", "dx", "t"]:
+                    begin = old_time - 0.050
+                    end = time + 0.050
+                    input_phones.append((begin, end, path.replace("phones", "wav"), phone_id))
+                    phone_labels.append(old_phone)
+                phone_id += 1
+input_phones=input_phones[:50]
 get_features(input_phones)
 print("Feature extraction completed")
 model = load_model("outputmodel.hd5")
@@ -115,9 +136,9 @@ z_scores = np.load(os.path.join(s.OUTPUT_DIR, "zscores.npy"))
 z_scores = np.hstack((z_scores,[[88.0977, 30.28, 447],
                         [515.34, 43.5, 75.344]]))
 LABELS = ["t", "trl", "tcl", "-", "dx", "q", "other"]
-print("pred truth")
+print("truth pred confs")
 for phone, (_, _, _, phone_id) in zip(phone_labels, input_phones):
     X = np.load(os.path.join(NUMPY_MATRICES, f"{phone_id}.npy"))
     X = (np.nan_to_num(X) - z_scores[0])/z_scores[1]
     pred = model.predict(X[None, ...])
-    print(phone, pred)
+    print(phone, LABELS[np.argmax(pred)], pred)
