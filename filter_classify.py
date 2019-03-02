@@ -6,7 +6,7 @@ import pickle
 import argparse
 import random 
 from math import ceil
-from time import sleep
+import datetime
 import numpy as np
 import settings as s
 import keras
@@ -20,7 +20,7 @@ TEST_SPLIT = 0.8
 MIN_LENGTH = 50
 EPOCHS = 10
 PHONEME_TO_TRAIN = "t"
-FEATURE_SIZE=88
+FEATURE_SIZE=68
 SLICE=200
 FEATURE_TYPE="AutoVOT"
 TEST_SPEAKERS = [ "DAB0", "WBT0", "ELC0", "TAS1", "WEW0", "PAS0", "JMP0", "LNT0", 
@@ -41,6 +41,41 @@ FEATURE_TYPE = args.feature_type
 POSITION = args.position
 PHONEME_TO_TRAIN = args.phoneme
 
+def get_labels(phoneme):
+    if phoneme == "t":
+        labels = ["t", "trl", "tcl", "-", "dx", "q", "other"]
+        allophone_classes = {
+                "trl":"trl",
+                "t":"t",
+                "tcl":"tcl",
+                "-":"-",
+                "dx":"dx",
+                "nx":"dx",
+                "q":"q"
+                }
+        valid_phonemes = ["t", "n_t", "t_y"]
+    elif phoneme == "d":
+        labels = ["d", "drl", "dcl", "-", "dx", "other"]
+        allophone_classes = {
+                "drl":"drl",
+                "d":"d",
+                "dcl":"dcl",
+                "-":"-",
+                "dx":"dx",
+                "nx":"dx",
+                }
+        valid_phonemes = ["d", "n_d", "d_y"]
+    else:
+       labels = [phoneme, "{}rl".format(phoneme), "{}cl".format(phoneme), "-", "other"]
+       allophone_classes = {
+       	phoneme: phoneme,
+               "{}rl".format(phoneme): "{}rl".format(phoneme),
+               "-":"-",
+               "{}cl".format(phoneme): "{}cl".format(phoneme),
+               }
+       valid_phonemes = [phoneme]
+    return labels, allophone_classes, valid_phonemes
+
 def plot_history(history):
     plt.plot(history.history['categorical_accuracy'])
     plt.plot(history.history['val_categorical_accuracy'])
@@ -48,19 +83,19 @@ def plot_history(history):
     plt.ylabel('Accuracy')
     plt.xlabel('Epoch')
     plt.legend(['Train', 'Test'], loc='upper left')
-    plt.show()
+    plt.savefig("plots/{}-{}-{}epochs-accuracy".format(datetime.datetime.now(), PHONEME_TO_TRAIN, EPOCHS))
     plt.plot(history.history['loss'])
     plt.plot(history.history['val_loss'])
     plt.title('Model loss')
     plt.ylabel('Loss')
     plt.xlabel('Epoch')
     plt.legend(['Train', 'Test'], loc='upper left')
-    plt.show()
+    plt.savefig("plots/{}-{}-{}epochs-loss".format(datetime.datetime.now(), PHONEME_TO_TRAIN, EPOCHS))
 
 def evaluate_model(truth, predictions, classes):
     conf_mat = confusion_matrix(truth, predictions)
     plt.imshow(conf_mat, interpolation='nearest', cmap=plt.cm.Blues)
-    plt.title(f"Confusion matrix for /{PHONEME_TO_TRAIN}/")
+    plt.title("Confusion matrix for /{}/".format(PHONEME_TO_TRAIN))
     plt.colorbar()
     tick_marks = np.arange(len(classes))
     plt.xticks(tick_marks, classes, rotation=45)
@@ -75,8 +110,7 @@ def evaluate_model(truth, predictions, classes):
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     plt.tight_layout()
-    plt.show()
-    
+    plt.savefig("plots/{}-{}-{}epochs-conf_mat".format(datetime.datetime.now(), PHONEME_TO_TRAIN, EPOCHS))
     print(conf_mat)
 
 def data_generator(data, batch_size=BATCH_SIZE, do_shuffle=False, sample_weight=False):
@@ -175,26 +209,19 @@ def sotc_generator():
 data = {}
 allophone_mapping = {}
 
-LABELS = ["t", "trl", "tcl", "-", "dx", "q", "other"]
-ALLOPHONE_CLASSES = {
-        "trl":"trl",
-        "t":"t",
-        "tcl":"tcl",
-        "-":"-",
-        "dx":"dx",
-        "nx":"dx",
-        "q":"q"
-        }
-VALID_PHONEMES = ["t", "n_t", "t_y"]
+LABELS, ALLOPHONE_CLASSES, VALID_PHONEMES = get_labels(PHONEME_TO_TRAIN)
+previous_phoneme = "x"
+count = 0
 with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "r") as csvfile:
     reader = csv.DictReader(csvfile)
     for i, row in enumerate(reader):
         if i % 50000 == 0:
-            print(f"{i}/224017")
+            print("{}/224017".format(i))
         phoneme = row["phoneme"].lower()
 
-        if phoneme not in VALID_PHONEMES and row["phone"] != "q":
-            continue
+        if phoneme not in VALID_PHONEMES:
+            if PHONEME_TO_TRAIN != "t" or row["phone"] != "q":
+               continue
 
         if row["boundary"] == "3" or row["boundary"] == "2":
             pos = "initial"
@@ -225,6 +252,7 @@ with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "r") as csvfile:
             "x_path":row["numpy_X"],
             "speaker":row["path"].split("/")[-2][1:],
             })
+print(count)
 print("Data generated")
 for k, v in allophone_mapping.items():
     if k not in ALLOPHONE_CLASSES:
@@ -247,8 +275,8 @@ for l in data:
             train_data[l].append(x)
 print("Data sorted")
 
-print(f"Train numbers:{numbers_train}")
-print(f"Test numbers:{numbers_test}")
+#print(f"Train numbers:{numbers_train}")
+#print(f"Test numbers:{numbers_test}")
 
 
 train_sample_weights = {v:0 for k, v in allophone_mapping.items()}
@@ -263,11 +291,10 @@ for k, v in train_sample_weights.items():
     else:
         x = 1.0
     train_sample_weights[k] = x if x > 1.0 else 1.0
-print(train_sample_weights)
 
 def new_model():
     model = keras.Sequential()
-    model.add(layers.GaussianNoise(0.3, input_shape=(None, FEATURE_SIZE)))
+    model.add(layers.GaussianNoise(0.5, input_shape=(None, FEATURE_SIZE)))
     model.add(layers.Conv1D(256, 5, activation="relu", kernel_regularizer=regularizers.l2(0.001)))
     model.add(layers.Dropout(0.1))
     model.add(layers.MaxPooling1D(5))
@@ -280,7 +307,6 @@ def new_model():
     model.add(layers.Dropout(0.5))
     model.add(layers.Dense(max(allophone_mapping.values())+1, activation="softmax"))
     return model
-
 
 model = new_model()
 adam = keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=None, amsgrad=True)
