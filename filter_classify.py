@@ -20,7 +20,7 @@ TEST_SPLIT = 0.8
 MIN_LENGTH = 50
 EPOCHS = 10
 PHONEME_TO_TRAIN = "t"
-FEATURE_SIZE=68
+FEATURE_SIZE=66
 SLICE=200
 FEATURE_TYPE="AutoVOT"
 TEST_SPEAKERS = [ "DAB0", "WBT0", "ELC0", "TAS1", "WEW0", "PAS0", "JMP0", "LNT0", 
@@ -83,14 +83,16 @@ def plot_history(history):
     plt.ylabel('Accuracy')
     plt.xlabel('Epoch')
     plt.legend(['Train', 'Test'], loc='upper left')
-    plt.savefig("plots/{}-{}-{}epochs-accuracy".format(datetime.datetime.now(), PHONEME_TO_TRAIN, EPOCHS))
+    plt.savefig("plots/{}-{}-{}epochs-accuracy.png".format(datetime.datetime.now(), PHONEME_TO_TRAIN, EPOCHS))
+    plt.clf()
     plt.plot(history.history['loss'])
     plt.plot(history.history['val_loss'])
     plt.title('Model loss')
     plt.ylabel('Loss')
     plt.xlabel('Epoch')
     plt.legend(['Train', 'Test'], loc='upper left')
-    plt.savefig("plots/{}-{}-{}epochs-loss".format(datetime.datetime.now(), PHONEME_TO_TRAIN, EPOCHS))
+    plt.savefig("plots/{}-{}-{}epochs-loss.png".format(datetime.datetime.now(), PHONEME_TO_TRAIN, EPOCHS))
+    plt.clf()
 
 def evaluate_model(truth, predictions, classes):
     conf_mat = confusion_matrix(truth, predictions)
@@ -110,7 +112,8 @@ def evaluate_model(truth, predictions, classes):
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     plt.tight_layout()
-    plt.savefig("plots/{}-{}-{}epochs-conf_mat".format(datetime.datetime.now(), PHONEME_TO_TRAIN, EPOCHS))
+    plt.savefig("plots/{}-{}-{}epochs-conf_mat.png".format(datetime.datetime.now(), PHONEME_TO_TRAIN, EPOCHS))
+    plt.clf()
     print(conf_mat)
 
 def data_generator(data, batch_size=BATCH_SIZE, do_shuffle=False, sample_weight=False):

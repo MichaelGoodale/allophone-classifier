@@ -2,6 +2,7 @@ import os
 import csv
 import sys
 import textgrid
+import wave
 import random
 import numpy as np
 from keras.models import load_model
@@ -31,7 +32,7 @@ for path in [VOT_DIR, NUMPY_MATRICES, AUDIO_DIR]:
         os.makedirs(path)
 
 def extract_segment(path, begin, end):
-    output_path = os.path.abspath(os.path.join(AUDIO_DIR, f"{uuid1()}.wav"))
+    output_path = os.path.abspath(os.path.join(AUDIO_DIR, "{}.wav".format(uuid1())))
     subprocess.run(["sox", path, output_path, "trim", str(begin), str(end-begin+0.01)])
     return output_path
 
@@ -57,32 +58,18 @@ def _calculate_features(i, phone_list):
     phone_list = sorted(phone_list, key=lambda x: (x[2], x[0]))
     with open(inputlist, "w") as input_f, open(outputlist, "w") as output_f:
         for begin, end, path, phone_id in phone_list:
-            input_f.write(f"\"{path}\" {begin:3f} {end:3f} {begin:3f} {end:3f} [seconds]\n")
-            output_path = os.path.join(VOT_DIR, f"{phone_id}")
+            input_f.write("\"{}\" {:3f} {:3f} {:3f} {:3f} [seconds]\n".format(path,begin,end,begin,end))
+            output_path = os.path.join(VOT_DIR, str(phone_id))
             output_f.write(output_path+"\n")
     ret = subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), inputlist, outputlist, "null"])
-    print(ret.returncode)
     subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
     memo = {}
     with open(predictions) as pred_f:
         for count, ((begin, end, path, phone_id), line) in enumerate(zip(phone_list, pred_f)):
-            if count % 10000 == 0:
-                print(f"{count}/{len(phone_list)}")
-
             vot_conf, vot_begin, vot_end = line.split()
             matrix = np.genfromtxt(os.path.join(VOT_DIR, str(phone_id)), skip_header=1)
-            matrix_file = os.path.join(NUMPY_MATRICES, f"{phone_id}.npy")
-            window_begin = int(begin*1000)
-            window_end = int(end*1000)
-            try:
-                X = get_glottal_features(path, memo, f"output_{i}")[window_begin:window_end+1]
-            except:
-                continue 
-
-            if X.shape[0] > matrix.shape[0]:
-                X = X[:matrix.shape[0]]
-            matrix = np.hstack((matrix, X))
-            matrix = np.insert(matrix, 85, [[vot_conf], [vot_begin], [vot_end]], axis=1)
+            matrix_file = os.path.join(NUMPY_MATRICES, "{}.npy".format(phone_id))
+            matrix = np.insert(matrix, 63, [[vot_conf], [vot_begin], [vot_end]], axis=1)
             np.save(matrix_file, matrix)
 
 def get_features(phone_list):
@@ -116,13 +103,17 @@ def get_features(phone_list):
 input_phones = []
 phone_labels = []
 phone_id = 0
-phones = set()
 for directory in os.listdir(s.BUCKEYE_DIR):
     for phone_file in [x for x in os.listdir(os.path.join(s.BUCKEYE_DIR, directory)) if x.endswith("phones")]:
         path = os.path.join(s.BUCKEYE_DIR, directory, phone_file)
         phone = "begin_of_file"
         time = 0 
-        max_time = float(subprocess.check_output(["soxi", "-D", path.replace(".phones", ".wav")])) - 0.005
+        #max_time = float(subprocess.check_output(["soxi", "-D", path.replace(".phones", ".wav")])) - 0.005
+        with wave.open(path.replace(".phones", ".wav"), 'r') as f:
+            frames = f.getnframes()
+            rate = f.getframerate()
+            duration = frames / float(rate)
+        max_time = duration - 0.005
         with open(path, 'r') as f:
             for line in f:
                 if not line.startswith(' '):
@@ -141,34 +132,41 @@ for directory in os.listdir(s.BUCKEYE_DIR):
                     input_phones.append((begin, end, path.replace("phones", "wav"), phone_id))
                     phone_labels.append(old_phone)
                     phone_id += 1
-files = list(set(x[2] for x in input_phones))
-files= random.sample(files, 8)
-input_phones = [x for x in input_phones if x[2] in files]
+file_list = list(set(x[2] for x in input_phones))
+file_list = random.sample(file_list, 4)
+input_phones = [x for x in input_phones if x[2] in file_list]
 get_features(input_phones)
 print("Feature extraction completed")
 model = load_model("outputmodel.hd5")
 
-#z_scores = np.load(os.path.join(s.OUTPUT_DIR, "zscores.npy"))
-#z_scores = np.hstack((z_scores,[[88.0977, 30.28, 447],
-#                        [515.34, 43.5, 75.344]]))
 LABELS = ["t", "trl", "tcl", "-", "dx", "q", "other"]
-print("truth pred confs")
-n = 0
-s_1 = np.zeros((1, 88))
-s_2 = np.zeros((1, 88))
-for phone, (_, _, _, phone_id) in zip(phone_labels, input_phones):
+file_zscores = {path: 
+    {"n" : 0,
+    "s_1" : np.zeros((1, 66), dtype=np.float64),
+    "s_2" : np.zeros((1, 66), dtype=np.float64)}
+    for path in set(x[2] for x in input_phones)}
+
+for phone, (_, _, path, phone_id) in zip(phone_labels, input_phones):
     try:
-        X = np.load(os.path.join(NUMPY_MATRICES, f"{phone_id}.npy"))
+        X = np.load(os.path.join(NUMPY_MATRICES, "{}.npy".format(phone_id)))
     except:
         continue
     X = np.nan_to_num(X)
-    n += X.shape[0]
-    s_1 += X.sum(axis=0)
-    s_2 += np.sum(np.square(X), axis=0)
-means = s_1/n
-stds= np.sqrt((n/(n-1))*((s_2/n) - np.square(s_1/n)))
-output = np.vstack((means, stds))
-np.save(os.path.join(s.OUTPUT_DIR, "buckeye_zscores"), output)
-#    X = (np.nan_to_num(X) - z_scores[0])/z_scores[1]
-#    pred = model.predict(X[None, ...])
-#    print(phone, LABELS[np.argmax(pred)], pred)
+    file_zscores[path]["n"] += X.shape[0]
+    file_zscores[path]["s_1"] += X.sum(axis=0)
+    file_zscores[path]["s_2"] += np.sum(np.square(X), axis=0)
+
+for k in file_zscores:
+    n = file_zscores[k]["n"] 
+    s_1 = file_zscores[k]["s_1"] 
+    s_2 = file_zscores[k]["s_2"] 
+    file_zscores[k]["stds"] = np.sqrt((n/(n-1))*((s_2/n) - np.square(s_1/n)))
+    file_zscores[k]["mean"] = s_1/n
+
+with open('predictions_weee', 'w') as f:
+    for phone, (_, _, path, phone_id) in zip(phone_labels, input_phones):
+        if phone not in LABELS:
+            continue
+        X = (np.nan_to_num(X) - file_zscores[path]["mean"])/file_zscores[path]["stds"]
+        pred = model.predict(X[None, ...])
+        f.write('{} {} {}\n'.format(phone, LABELS[np.argmax(pred)], path))
