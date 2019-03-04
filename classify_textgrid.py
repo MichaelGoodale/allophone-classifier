@@ -164,9 +164,12 @@ for k in file_zscores:
     file_zscores[k]["mean"] = s_1/n
 
 with open('predictions_weee', 'w') as f:
-    for phone, (_, _, path, phone_id) in zip(phone_labels, input_phones):
+    for phone, (begin, end, path, phone_id) in zip(phone_labels, input_phones):
         if phone not in LABELS:
             continue
         X = (np.nan_to_num(X) - file_zscores[path]["mean"])/file_zscores[path]["stds"]
         pred = model.predict(X[None, ...])
-        f.write('{} {} {}\n'.format(phone, LABELS[np.argmax(pred)], path))
+        f.write('{} {} {} {} {}\n'.format(phone, LABELS[np.argmax(pred)], path, begin, end))
+for k in file_zscores:
+    print(file_zscores[k]["stds"])
+    print(file_zscores[k]["mean"])
