@@ -38,13 +38,13 @@ for dialect_region in sorted(os.listdir(s.TIMIT_DIR)):
 inputlist = os.path.join(s.OUTPUT_DIR, "inputlist")
 outputlist = os.path.join(s.OUTPUT_DIR, "outputlist")
 predictions = os.path.join(s.OUTPUT_DIR, "predictions")
-numpy_output = os.path.join(s.OUTPUT_DIR, "timit_matrices")
+numpy_output = os.path.join(s.OUTPUT_DIR, "timit_noisy_matrices")
 
 phone_dictionaries = []
 with open(inputlist, "w") as input_f, open(outputlist, "w") as output_f:
     for i, x in enumerate(phones):
-        input_f.write(f"\"{x.path}.WAV\" {x.window_begin:3f} {x.window_end:3f} {x.window_begin:3f} {x.window_end:3f} [seconds]\n")
-        output_path = os.path.join(s.OUTPUT_DIR, "autovot_files", f"{i}")
+        input_f.write("\"{}.WAV\" {:3f} {:3f} {:3f} {:3f} [seconds]\n".format(x.path,x.window_begin,x.window_end,x.window_begin,x.window_end))
+        output_path = os.path.join(s.OUTPUT_DIR, "autovot_files", str(i))
         output_f.write(output_path+"\n")
         phone_dictionaries.append({"phone":x.phone,
             "phoneme":x.underlying_phoneme,
@@ -58,11 +58,10 @@ with open(inputlist, "w") as input_f, open(outputlist, "w") as output_f:
             "window_end":x.window_end,
             "vot_file":output_path})
         if i % 1000 == 0:
-            print(f"{datetime.datetime.now()}  {i}/{len(phones)}")
+            print("{} {}/{}".format(datetime.datetime.now(), i, len(phones)))
 
 subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), inputlist, outputlist, "null"])
 subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
-err = 0
 with open(predictions) as pred_f:
     for i, line in enumerate(pred_f):
         vot_conf, vot_begin, vot_end = line.split()
@@ -70,26 +69,13 @@ with open(predictions) as pred_f:
         phone_dictionaries[i]["vot_begin"] = vot_begin
         phone_dictionaries[i]["vot_end"] = vot_end
         matrix = np.genfromtxt(phone_dictionaries[i]["vot_file"], skip_header=1)
-        matrix_file = os.path.join(numpy_output, f"{i}.npy")
-        window_begin = int(phone_dictionaries[i]["window_begin"]*1000)
-        window_end = int(phone_dictionaries[i]["window_end"]*1000)
-        X = get_glottal_features(phone_dictionaries[i]["path"]+".WAV")[window_begin:window_end+1]
-        if X.shape[0] > matrix.shape[0]:
-            X = X[:matrix.shape[0]]
-        if X.shape[0] != matrix.shape[0]:
-            phone_dictionaries[i]["incl"] = 0
-            phone_dictionaries[i]["numpy_X"] = "na"
-            err += 1
-            continue
-        else:
-            phone_dictionaries[i]["incl"] = 1
-        matrix = np.hstack((matrix, X))
+        matrix_file = os.path.join(numpy_output, "{}.npy".format(i))
         np.save(matrix_file, matrix)
         phone_dictionaries[i]["numpy_X"] = matrix_file
         if i % 1000 == 0:
-            print(f"{datetime.datetime.now()}  {i}/{len(phones)}")
-print(f"{err} stops excluded")
-with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "w") as csvfile:
+            print("{} {}/{}".format(datetime.datetime.now(), i, len(phones)))
+
+with open(os.path.join(s.OUTPUT_DIR, "timit_wew_data.csv"), "w") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=phone_dictionaries[0].keys())
     writer.writeheader()
     writer.writerows(phone_dictionaries)

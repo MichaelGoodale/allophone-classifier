@@ -1,5 +1,6 @@
 import os
 import subprocess
+import wave
 import numpy as np
 import scipy.io.wavfile as wavefile
 import settings as s
@@ -21,7 +22,7 @@ with open('wrdalign.timit', 'r') as f:
                 phoneme, phone, distance, stress, boundary = line.strip("\n").split("\t")
             if phone == "+":
                 old_phoneme, old_phone, old_distance, old_stress, old_boundary, word = phoneme_phone_mappings[(dialect, speaker, sentence)][-1]
-                phoneme = f"{old_phoneme}_{phoneme}"
+                phoneme = "{}_{}".format(old_phoneme, phoneme)
                 phoneme_phone_mappings[(dialect, speaker, sentence)][-1] = (phoneme, old_phone, old_distance, old_stress, old_boundary, word)
             else:
                 data = (phoneme, phone, distance, stress, boundary, word)
@@ -70,23 +71,37 @@ class Sentence:
                 pron_list.append((begin, end, phone))
                 i += 1
         if len(pron_list) != len(temp_phone_list):
-            raise ValueError(f"Pron list does not match phone list in {self.dialect}/{self.speaker}/{self.sentence}")
-
+            raise ValueError("Pron list does not match phone list in "+"{}/{}/{}".format(self.dialect, self.speaker, self.sentence))
         for (begin, end, phone), (phoneme, _, distance, stress, boundary, word) in zip(pron_list, temp_phone_list):
             if phoneme == "+":
                 old_phone = self.phone_list[-1]
                 if same_place(old_phone.phone, phone):
-                    newphone = f"{phone}rl"
+                    newphone = "{}rl".format(phone)
                 else:
-                    newphone = f"{old_phone.phone}_{phone}"
+                    newphone = "{}_{}".format(old_phone.phone, phone)
                 self.phone_list[-1] = Phone(old_phone.begin, end, newphone, old_phone.underlying_phoneme, word, \
                         old_phone.stress, old_phone.boundary, sentence_path)
             else:
                 self.phone_list.append(Phone(begin, end, phone, phoneme, word, stress, boundary, sentence_path))
+            if len(self.phone_list) >= 2:
+                self.phone_list[-1].set_previous_phone(self.phone_list[-2])
+        syllables = [x.stress for x in self.phone_list if x.stress != "-"]
+        syl_i = -1 
+        speech_rate = len(syllables)/self.phone_list[0].sentence_length
+        for phone in self.phone_list[0:-1]:
+            if phone.boundary in ["1", "2"]:
+                syl_i += 1
+            if syl_i == -1:
+                phone.stress = syllables[0]
+            elif syl_i >= len(syllables):
+                syl_i = len(syllables)-1
+            else:
+                phone.stress = syllables[syl_i]
+            phone.set_speech_rate(speech_rate)
 
 class Phone:
     lengths = {}
-
+#
     def __init__(self, begin, end, phone, underlying_phoneme, word, stress, boundary, path):
         self.begin = int(begin)
         self.end = int(end)
@@ -96,6 +111,8 @@ class Phone:
         self.underlying_phoneme = underlying_phoneme
         self.stress = stress
         self.boundary = boundary
+        self.previous_phone = "START"
+        self.following_phone = "END"
 
     @property
     def duration(self):
@@ -111,19 +128,33 @@ class Phone:
         '''Begin of audio end in seconds'''
         return min(self.sentence_length-0.005, self.end/16000+(s.WINDOW_AFTER/1000))
 
+    def set_speech_rate(self, speech_rate):
+        self.speech_rate = speech_rate
+
     @property
     def sentence_length(self):
         if self.path in Phone.lengths:
             return Phone.lengths[self.path]
-        Phone.lengths[self.path] = float(subprocess.check_output(["soxi", "-D", self.path+".WAV"]))
+        with wave.open(self.path+".WAV", 'r') as f:
+            frames = f.getnframes()
+            rate = f.getframerate()
+            duration = frames / float(rate)
+        Phone.lengths[self.path] = duration
         return Phone.lengths[self.path]
 
+    def set_following_phone(self, phone):
+        self.following_phone = phone
+
+    def set_previous_phone(self, phone):
+        self.previous_phone = phone
+        self.previous_phone.set_following_phone(self)
+
     def __repr__(self):
-        return f"/{self.underlying_phoneme}/,[{self.phone}],{self.begin},{self.end}"
+        return "/{}/,[{}],{},{}".format(self.underlying_phoneme, self.phone, self.begin, self.end)
 
     def extract_filter_banks(self, margin=0, pre_emphasis=0.97, frame_size=0.005, frame_stride=0.003, NFFT=512, nfilt=40):
         '''Code adapted from https://haythamfayek.com/2016/04/21/speech-processing-for-machine-learning.html'''
-        sample_rate, signal = wavefile.read(f"{self.path}.WAV")
+        sample_rate, signal = wavefile.read(self.path+".WAV")
         signal = signal[max(0, self.begin-int(margin*sample_rate)):self.end+int(margin*sample_rate)]
         emphasized_signal = np.append(signal[0], signal[1:] - pre_emphasis * signal[:-1])
 

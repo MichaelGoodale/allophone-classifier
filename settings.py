@@ -3,7 +3,7 @@ import os
 CLASSIFIER = os.path.join("classifier", "classifier")
 
 CORPORA_DIRECTORY = "../corpora"
-TIMIT_DIR = os.path.join(CORPORA_DIRECTORY, "spade-TIMIT", "textgrid-wav")
+TIMIT_DIR = os.path.join(CORPORA_DIRECTORY, "spade-TIMIT-noisy", "spade-TIMIT-noisy", "audio_and_transcripts")
 SOTC_DIR = os.path.join(CORPORA_DIRECTORY, "spade-SOTC", "audio_and_transcripts")
 BUCKEYE_DIR = os.path.join(CORPORA_DIRECTORY, "spade-Buckeye", "textgrid-wav")
 OUTPUT_DIR = "data"
@@ -36,7 +36,7 @@ POSSIBLE_ALLOPHONES = {"b": ["b", "bcl", "brl"],
         "k": ["k", "kcl", "krl"]}
 
 WINDOW_BEFORE = 50
-WINDOW_AFTER = 250
+WINDOW_AFTER = 50
 
 INCLUDE_NON_T_Q = True
 

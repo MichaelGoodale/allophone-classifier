@@ -21,7 +21,7 @@ MIN_LENGTH = 50
 EPOCHS = 10
 PHONEME_TO_TRAIN = "t"
 FEATURE_SIZE=66
-SLICE=200
+SLICE=0
 FEATURE_TYPE="AutoVOT"
 TEST_SPEAKERS = [ "DAB0", "WBT0", "ELC0", "TAS1", "WEW0", "PAS0", "JMP0", "LNT0", 
                   "PKT0", "LLL0", "TLS0", "JLM0", "BPM0", "KLT0", "NLP0", "CMJ0",
@@ -117,8 +117,8 @@ def evaluate_model(truth, predictions, classes):
     print(conf_mat)
 
 def data_generator(data, batch_size=BATCH_SIZE, do_shuffle=False, sample_weight=False):
-    z_scores = np.load(os.path.join(s.OUTPUT_DIR, "zscores.npy"))
-    rand = random.Random(32)
+    z_scores = np.load(os.path.join(s.OUTPUT_DIR, "zscores.npy"))[:, :FEATURE_SIZE -3]
+    rand = random.Random()
     length_order = list(data.keys())
     path_cache = {}
     number_of_classes = max(allophone_mapping.values())+1
@@ -138,7 +138,7 @@ def data_generator(data, batch_size=BATCH_SIZE, do_shuffle=False, sample_weight=
                 batch_sample_weights = []
                 for phone in new_data_list[position:position+batch_size]:
                     if phone["x_path"] not in path_cache:
-                        phone_x = np.nan_to_num(np.load(phone["x_path"]))
+                        phone_x = np.nan_to_num(np.load(phone["x_path"]))[:, :FEATURE_SIZE-3]
                         phone_x = (phone_x - z_scores[0])/z_scores[1]
                         phone_x = phone_x[:, :FEATURE_SIZE-3]
                         phone_x = np.insert(phone_x, FEATURE_SIZE-3, [[row["vot_conf"]], [row["vot_begin"]], [row["vot_end"]]], axis=1)
@@ -215,7 +215,8 @@ allophone_mapping = {}
 LABELS, ALLOPHONE_CLASSES, VALID_PHONEMES = get_labels(PHONEME_TO_TRAIN)
 previous_phoneme = "x"
 count = 0
-with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "r") as csvfile:
+rand_p = random.Random(39)
+with open(os.path.join(s.OUTPUT_DIR, "timit_noisy_data.csv"), "r") as csvfile:
     reader = csv.DictReader(csvfile)
     for i, row in enumerate(reader):
         if i % 50000 == 0:
@@ -224,7 +225,7 @@ with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "r") as csvfile:
 
         if phoneme not in VALID_PHONEMES:
             if PHONEME_TO_TRAIN != "t" or row["phone"] != "q":
-               continue
+                continue
 
         if row["boundary"] == "3" or row["boundary"] == "2":
             pos = "initial"
@@ -251,6 +252,9 @@ with open(os.path.join(s.OUTPUT_DIR, "timit_data.csv"), "r") as csvfile:
             "vot_conf":(float(row["vot_conf"])-88.0977)/515.34,
             "vot_begin":(float(row["vot_begin"])-30.28)/43.5,
             "vot_end":(float(row["vot_end"])-68.447)/75.344,
+            #"vot_conf":float(row["vot_conf"]),
+            #"vot_begin":float(row["vot_begin"]),
+            #"vot_end":float(row["vot_end"]),
             "phoneme":phoneme,
             "x_path":row["numpy_X"],
             "speaker":row["path"].split("/")[-2][1:],
@@ -262,6 +266,7 @@ for k, v in allophone_mapping.items():
         allophone_mapping[k] = LABELS.index("other")
     else:
         allophone_mapping[k]=LABELS.index(ALLOPHONE_CLASSES[k])
+print(allophone_mapping)
 train_data = {}
 test_data = {}
 numbers_test = {k:0 for k in allophone_mapping.values()}
@@ -298,20 +303,32 @@ for k, v in train_sample_weights.items():
 def new_model():
     model = keras.Sequential()
     model.add(layers.GaussianNoise(0.5, input_shape=(None, FEATURE_SIZE)))
-    model.add(layers.Conv1D(256, 5, activation="relu", kernel_regularizer=regularizers.l2(0.001)))
-    model.add(layers.Dropout(0.1))
+    model.add(layers.Conv1D(128, 5, activation="relu"))
     model.add(layers.MaxPooling1D(5))
-    model.add(layers.Conv1D(512, 5, activation="relu", kernel_regularizer=regularizers.l2(0.001)))
-    model.add(layers.Dropout(0.1))
+    model.add(layers.Conv1D(256, 5, activation="relu"))
     model.add(layers.GlobalAveragePooling1D())
-    model.add(layers.Dense(1000, activation="relu", kernel_regularizer=regularizers.l2(0.001)))
+    model.add(layers.Dense(500, activation="relu"))
     model.add(layers.Dropout(0.5))
-    model.add(layers.Dense(500, activation="relu", kernel_regularizer=regularizers.l2(0.001)))
+    model.add(layers.Dense(500, activation="relu"))
     model.add(layers.Dropout(0.5))
     model.add(layers.Dense(max(allophone_mapping.values())+1, activation="softmax"))
     return model
 
-model = new_model()
+def simple_model():
+    model = keras.Sequential()
+    model.add(layers.GaussianNoise(0.1, input_shape=(None, FEATURE_SIZE)))
+    model.add(layers.Conv1D(50, 3, activation="relu"))
+    model.add(layers.MaxPooling1D(3))
+    model.add(layers.Conv1D(100, 3, activation="relu"))
+    model.add(layers.GlobalAveragePooling1D())
+    model.add(layers.Dense(350, activation="relu"))
+    model.add(layers.Dropout(0.5))
+    model.add(layers.Dense(250, activation="relu"))
+    model.add(layers.Dropout(0.5))
+    model.add(layers.Dense(max(allophone_mapping.values())+1, activation="softmax"))
+    return model
+
+model = simple_model()
 adam = keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=None, amsgrad=True)
 model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=["categorical_accuracy"])
 model.summary()
@@ -325,9 +342,10 @@ for i, (x, y) in enumerate(data_generator(test_data)):
         break
     y_s.append(y)
 test_y = np.vstack(y_s)
+
 history = model.fit_generator(data_generator(train_data, do_shuffle=True, sample_weight=False), steps_per_epoch=train_size,\
             validation_data=data_generator(test_data), validation_steps=validation_size, epochs=EPOCHS)
-model.save("outputmodel.hd5")
+model.save("{}_model.hd5".format(PHONEME_TO_TRAIN))
 plot_history(history)
 pred = model.predict_generator(data_generator(test_data), validation_size)
 evaluate_model(np.argmax(test_y, axis=1), np.argmax(pred, axis=1), LABELS)

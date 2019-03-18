@@ -57,7 +57,7 @@ def _calculate_features(i, phone_list):
     predictions = PREDICTIONS+str(i)
     phone_list = sorted(phone_list, key=lambda x: (x[2], x[0]))
     with open(inputlist, "w") as input_f, open(outputlist, "w") as output_f:
-        for begin, end, path, phone_id in phone_list:
+        for begin, end, path, phone_id, *rest in phone_list:
             input_f.write("\"{}\" {:3f} {:3f} {:3f} {:3f} [seconds]\n".format(path,begin,end,begin,end))
             output_path = os.path.join(VOT_DIR, str(phone_id))
             output_f.write(output_path+"\n")
@@ -65,7 +65,7 @@ def _calculate_features(i, phone_list):
     subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
     memo = {}
     with open(predictions) as pred_f:
-        for count, ((begin, end, path, phone_id), line) in enumerate(zip(phone_list, pred_f)):
+        for count, ((begin, end, path, phone_id, *rest), line) in enumerate(zip(phone_list, pred_f)):
             vot_conf, vot_begin, vot_end = line.split()
             matrix = np.genfromtxt(os.path.join(VOT_DIR, str(phone_id)), skip_header=1)
             matrix_file = os.path.join(NUMPY_MATRICES, "{}.npy".format(phone_id))
@@ -75,23 +75,12 @@ def _calculate_features(i, phone_list):
 def get_features(phone_list):
     '''Takes in a list of 4-tuples formatted with input, output, path and phone_id'''
     n_phones = len(phone_list)
-    list_size = int(n_phones/(N_CPU-1))
+    list_size = int(n_phones/(N_CPU))
     sub_lists = [phone_list[i:i+list_size] for i in range(0, n_phones, list_size)]
-
-    #Ensure that no lists have overlapping paths
-    represented_paths = [set(x[2] for x in l) for l in sub_lists]
-    combinations = list(itertools.combinations(range(len(sub_lists)), 2))
-    random.shuffle(combinations)
-    for i, j in combinations:
-        intersect = represented_paths[i].intersection(represented_paths[j])
-        if len(intersect) != 0:
-            for path in intersect:
-                i, j = random.sample([i, j], 2)
-                sub_lists[j] = sub_lists[j]+[x for x in sub_lists[i] if x[2] == path]
-                sub_lists[i] = [x for x in sub_lists[i] if x[2] != path]
-                represented_paths[i].remove(path)
-    jobs = []
     sub_lists = [x for x in sub_lists if len(x) > 0]
+    while len(sub_lists) > N_CPU:
+        sub_lists[len(sub_lists)-1] += sub_lists.pop()
+    jobs = []
     for i in range(len(sub_lists)):
         p = multiprocessing.Process(target=_calculate_features, args=(i, sub_lists[i]))
         jobs.append(p)
@@ -108,7 +97,6 @@ for directory in os.listdir(s.BUCKEYE_DIR):
         path = os.path.join(s.BUCKEYE_DIR, directory, phone_file)
         phone = "begin_of_file"
         time = 0 
-        #max_time = float(subprocess.check_output(["soxi", "-D", path.replace(".phones", ".wav")])) - 0.005
         with wave.open(path.replace(".phones", ".wav"), 'r') as f:
             frames = f.getnframes()
             rate = f.getframerate()
@@ -125,51 +113,77 @@ for directory in os.listdir(s.BUCKEYE_DIR):
                 old_time, old_phone = time, phone
                 time, _, phone = line.split(' ')
                 time = float(time)
-                #if old_phone in ["tq", "dx", "t"]:
-                begin = max(old_time - 0.050, 0)
-                end = min(time + 0.100, max_time)
+                begin = max(old_time - 0.50, 0)
+                end = min(time + 0.15, max_time)
+                if phone not in ["tq", "t", "dx"]:
+                    continue
                 if end - begin > 0.030:
-                    input_phones.append((begin, end, path.replace("phones", "wav"), phone_id))
-                    phone_labels.append(old_phone)
+                    input_phones.append((begin, end, path.replace("phones", "wav"), uuid1(), phone_id, phone))
+                    phone_labels.append(phone_id)
                     phone_id += 1
-file_list = list(set(x[2] for x in input_phones))
-file_list = random.sample(file_list, 4)
-input_phones = [x for x in input_phones if x[2] in file_list]
+phone_labels = set(random.Random(69).sample(phone_labels, 100))
+input_phones = [x for x in input_phones if x[4] in phone_labels]
 get_features(input_phones)
 print("Feature extraction completed")
 model = load_model("outputmodel.hd5")
 
 LABELS = ["t", "trl", "tcl", "-", "dx", "q", "other"]
-file_zscores = {path: 
-    {"n" : 0,
-    "s_1" : np.zeros((1, 66), dtype=np.float64),
-    "s_2" : np.zeros((1, 66), dtype=np.float64)}
-    for path in set(x[2] for x in input_phones)}
-
-for phone, (_, _, path, phone_id) in zip(phone_labels, input_phones):
-    try:
-        X = np.load(os.path.join(NUMPY_MATRICES, "{}.npy".format(phone_id)))
-    except:
-        continue
-    X = np.nan_to_num(X)
-    file_zscores[path]["n"] += X.shape[0]
-    file_zscores[path]["s_1"] += X.sum(axis=0)
-    file_zscores[path]["s_2"] += np.sum(np.square(X), axis=0)
-
-for k in file_zscores:
-    n = file_zscores[k]["n"] 
-    s_1 = file_zscores[k]["s_1"] 
-    s_2 = file_zscores[k]["s_2"] 
-    file_zscores[k]["stds"] = np.sqrt((n/(n-1))*((s_2/n) - np.square(s_1/n)))
-    file_zscores[k]["mean"] = s_1/n
-
+zscores = np.load("data/zscores.npy")[:, :63]
+zscores = np.hstack((zscores, [[88.0977, 30.28, 68.447], [515.34, 43.5, 75.344]]))
+correct = 0
+incorrect = 0
+cor_conf = 0
+incor_conf = 0
+high_conf = 0
+high_cor = 0
 with open('predictions_weee', 'w') as f:
-    for phone, (begin, end, path, phone_id) in zip(phone_labels, input_phones):
-        if phone not in LABELS:
-            continue
-        X = (np.nan_to_num(X) - file_zscores[path]["mean"])/file_zscores[path]["stds"]
-        pred = model.predict(X[None, ...])
-        f.write('{} {} {} {} {}\n'.format(phone, LABELS[np.argmax(pred)], path, begin, end))
-for k in file_zscores:
-    print(file_zscores[k]["stds"])
-    print(file_zscores[k]["mean"])
+    for phone_id in phone_labels:
+        pred = np.zeros((1, 7))
+        for i, (begin, end, path, uid, phone_id, phone) in enumerate([x for x in input_phones if x[4] == phone_id]):
+            X = np.load(os.path.join(NUMPY_MATRICES, "{}.npy".format(uid)))
+            X = np.nan_to_num(X)
+            X = ((np.nan_to_num(X) - zscores[0])/zscores[1])
+            pred[i, :] = model.predict(X[None, ...])
+        pred = np.mean(pred, axis=0)
+        argmax = np.argmax(pred)
+        #argmax = np.unravel_index(np.argmax(pred, axis=None), pred.shape)[1]
+        conf = np.max(pred)
+        f.write('{} {} {} {} {} {}\n'.format(phone, LABELS[argmax], conf, path, begin, end))
+        pred = LABELS[argmax]
+        if conf > 0.50:
+           high_conf += 1
+           if phone == "t":
+               if pred in ["t", "tcl", "trl"]:
+                  high_cor +=1
+           elif phone == "tq":
+               if pred == "q":
+                  high_cor +=1
+           elif phone == "dx":
+               if pred == "dx":
+                  high_cor +=1
+
+        if phone == "t":
+            if pred in ["t", "tcl", "trl"]:
+                correct += 1
+                cor_conf += conf
+            else:
+                incorrect += 1
+                incor_conf += conf
+        elif phone == "tq":
+            if pred == "q":
+                correct += 1
+                cor_conf += conf
+            else:
+                incorrect += 1
+                incor_conf += conf
+        elif phone == "dx":
+            if pred == "dx":
+                correct += 1
+                cor_conf += conf
+            else:
+                incorrect += 1
+                incor_conf += conf
+print("{}/{}".format(correct, incorrect+correct))
+print("Correct conf {}".format(cor_conf/correct))
+print("Incorrect conf {}".format(incor_conf/incorrect))
+print("{}/{}".format(high_cor, high_conf))
