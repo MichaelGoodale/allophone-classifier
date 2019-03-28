@@ -14,7 +14,7 @@ import itertools
 import settings as s
 
 N_CPU = multiprocessing.cpu_count()
-TEMP_DIR = os.path.join(s.OUTPUT_DIR, "classifier_temporary")
+TEMP_DIR = os.path.join(s.OUTPUT_DIR, "temp")
 
 PRAAT_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)), "praat_barren")
 OPENSAUCE_FEATURES = ["snackF0", "praatF0", "shrF0", "reaperF0", "snackFormants", "praatFormants", "SHR"]
@@ -61,7 +61,7 @@ def _calculate_features(i, phone_list):
             input_f.write("\"{}\" {:3f} {:3f} {:3f} {:3f} [seconds]\n".format(path,begin,end,begin,end))
             output_path = os.path.join(VOT_DIR, str(phone_id))
             output_f.write(output_path+"\n")
-    ret = subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), inputlist, outputlist, "null"])
+    ret = subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotFrontEnd2"), "-dont_normalize", inputlist, outputlist, "null"])
     subprocess.run([os.path.join(s.PATH_TO_AUTOVOT, "VotDecode"), "-pos_only", "-output_predictions", predictions, outputlist, "null", s.CLASSIFIER])
     memo = {}
     with open(predictions) as pred_f:
@@ -79,7 +79,8 @@ def get_features(phone_list):
     sub_lists = [phone_list[i:i+list_size] for i in range(0, n_phones, list_size)]
     sub_lists = [x for x in sub_lists if len(x) > 0]
     while len(sub_lists) > N_CPU:
-        sub_lists[len(sub_lists)-1] += sub_lists.pop()
+        temp = sub_lists.pop()
+        sub_lists[len(sub_lists)-1] += temp
     jobs = []
     for i in range(len(sub_lists)):
         p = multiprocessing.Process(target=_calculate_features, args=(i, sub_lists[i]))
@@ -113,23 +114,22 @@ for directory in os.listdir(s.BUCKEYE_DIR):
                 old_time, old_phone = time, phone
                 time, _, phone = line.split(' ')
                 time = float(time)
-                begin = max(old_time - 0.50, 0)
-                end = min(time + 0.15, max_time)
+                begin = max(old_time - 0.050, 0)
+                end = min(time + 0.050, max_time)
                 if phone not in ["tq", "t", "dx"]:
                     continue
                 if end - begin > 0.030:
                     input_phones.append((begin, end, path.replace("phones", "wav"), uuid1(), phone_id, phone))
                     phone_labels.append(phone_id)
                     phone_id += 1
-phone_labels = set(random.Random(69).sample(phone_labels, 100))
+phone_labels = set(random.Random(69).sample(phone_labels, 500))
 input_phones = [x for x in input_phones if x[4] in phone_labels]
 get_features(input_phones)
 print("Feature extraction completed")
-model = load_model("outputmodel.hd5")
+model = load_model("t_model_max.hd5")
 
 LABELS = ["t", "trl", "tcl", "-", "dx", "q", "other"]
-zscores = np.load("data/zscores.npy")[:, :63]
-zscores = np.hstack((zscores, [[88.0977, 30.28, 68.447], [515.34, 43.5, 75.344]]))
+zscores = np.load("data/zscores_new.npy")
 correct = 0
 incorrect = 0
 cor_conf = 0
@@ -142,9 +142,9 @@ with open('predictions_weee', 'w') as f:
         for i, (begin, end, path, uid, phone_id, phone) in enumerate([x for x in input_phones if x[4] == phone_id]):
             X = np.load(os.path.join(NUMPY_MATRICES, "{}.npy".format(uid)))
             X = np.nan_to_num(X)
-            X = ((np.nan_to_num(X) - zscores[0])/zscores[1])
+            X = ((X - zscores[0])/zscores[1])
             pred[i, :] = model.predict(X[None, ...])
-        pred = np.mean(pred, axis=0)
+        print(pred)
         argmax = np.argmax(pred)
         #argmax = np.unravel_index(np.argmax(pred, axis=None), pred.shape)[1]
         conf = np.max(pred)

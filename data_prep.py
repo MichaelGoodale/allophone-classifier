@@ -38,7 +38,7 @@ for dialect_region in sorted(os.listdir(s.TIMIT_DIR)):
 inputlist = os.path.join(s.OUTPUT_DIR, "inputlist")
 outputlist = os.path.join(s.OUTPUT_DIR, "outputlist")
 predictions = os.path.join(s.OUTPUT_DIR, "predictions")
-numpy_output = os.path.join(s.OUTPUT_DIR, "timit_noisy_matrices")
+numpy_output = os.path.join(s.OUTPUT_DIR, "timit_unnormalised_matrices")
 
 phone_dictionaries = []
 with open(inputlist, "w") as input_f, open(outputlist, "w") as output_f:
@@ -55,7 +55,7 @@ with open(inputlist, "w") as input_f, open(outputlist, "w") as output_f:
             "begin":x.begin,
             "end":x.end,
             "window_begin":x.window_begin,
-            "window_end":x.window_end,
+            "window_end":x.window_end-200,
             "vot_file":output_path})
         if i % 1000 == 0:
             print("{} {}/{}".format(datetime.datetime.now(), i, len(phones)))
@@ -75,7 +75,7 @@ with open(predictions) as pred_f:
         if i % 1000 == 0:
             print("{} {}/{}".format(datetime.datetime.now(), i, len(phones)))
 
-with open(os.path.join(s.OUTPUT_DIR, "timit_wew_data.csv"), "w") as csvfile:
+with open(os.path.join(s.OUTPUT_DIR, "timit_unnorm_data.csv"), "w") as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=phone_dictionaries[0].keys())
     writer.writeheader()
     writer.writerows(phone_dictionaries)

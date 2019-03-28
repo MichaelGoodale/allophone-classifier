@@ -5,7 +5,7 @@ CLASSIFIER = os.path.join("classifier", "classifier")
 CORPORA_DIRECTORY = "../corpora"
 TIMIT_DIR = os.path.join(CORPORA_DIRECTORY, "spade-TIMIT-noisy", "spade-TIMIT-noisy", "audio_and_transcripts")
 SOTC_DIR = os.path.join(CORPORA_DIRECTORY, "spade-SOTC", "audio_and_transcripts")
-BUCKEYE_DIR = os.path.join(CORPORA_DIRECTORY, "spade-Buckeye", "textgrid-wav")
+BUCKEYE_DIR = os.path.join(CORPORA_DIRECTORY, "Spade-Buckeye-hi-pass-norm", "textgrid-wav")
 OUTPUT_DIR = "data"
 
 PATH_TO_AUTOVOT = "../autovot/autovot/bin"
@@ -35,8 +35,8 @@ POSSIBLE_ALLOPHONES = {"b": ["b", "bcl", "brl"],
         "t": ["t", "tcl", "trl", "q", "dx"],
         "k": ["k", "kcl", "krl"]}
 
-WINDOW_BEFORE = 50
-WINDOW_AFTER = 50
+WINDOW_BEFORE = 25
+WINDOW_AFTER = 25
 
 INCLUDE_NON_T_Q = True
 

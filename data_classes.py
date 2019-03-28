@@ -80,7 +80,7 @@ class Sentence:
                 else:
                     newphone = "{}_{}".format(old_phone.phone, phone)
                 self.phone_list[-1] = Phone(old_phone.begin, end, newphone, old_phone.underlying_phoneme, word, \
-                        old_phone.stress, old_phone.boundary, sentence_path)
+                        old_phone.stress, old_phone.boundary, sentence_path, old_phone_end=old_phone.end, new_phone_begin=begin)
             else:
                 self.phone_list.append(Phone(begin, end, phone, phoneme, word, stress, boundary, sentence_path))
             if len(self.phone_list) >= 2:
@@ -102,7 +102,7 @@ class Sentence:
 class Phone:
     lengths = {}
 #
-    def __init__(self, begin, end, phone, underlying_phoneme, word, stress, boundary, path):
+    def __init__(self, begin, end, phone, underlying_phoneme, word, stress, boundary, path, old_phone_end=None, new_phone_begin=None):
         self.begin = int(begin)
         self.end = int(end)
         self.phone = phone
@@ -113,6 +113,9 @@ class Phone:
         self.boundary = boundary
         self.previous_phone = "START"
         self.following_phone = "END"
+        self.internal_boundary = 0
+        if old_phone_end is not None and new_phone_begin is not None:
+            self.internal_boundary = old_phone_end
 
     @property
     def duration(self):

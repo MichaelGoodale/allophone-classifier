@@ -21,7 +21,6 @@ MIN_LENGTH = 50
 EPOCHS = 10
 PHONEME_TO_TRAIN = "t"
 FEATURE_SIZE=66
-SLICE=0
 FEATURE_TYPE="AutoVOT"
 TEST_SPEAKERS = [ "DAB0", "WBT0", "ELC0", "TAS1", "WEW0", "PAS0", "JMP0", "LNT0", 
                   "PKT0", "LLL0", "TLS0", "JLM0", "BPM0", "KLT0", "NLP0", "CMJ0",
@@ -117,7 +116,7 @@ def evaluate_model(truth, predictions, classes):
     print(conf_mat)
 
 def data_generator(data, batch_size=BATCH_SIZE, do_shuffle=False, sample_weight=False):
-    z_scores = np.load(os.path.join(s.OUTPUT_DIR, "zscores.npy"))[:, :FEATURE_SIZE -3]
+    z_scores = np.load(os.path.join(s.OUTPUT_DIR, "zscores_new.npy"))
     rand = random.Random()
     length_order = list(data.keys())
     path_cache = {}
@@ -126,7 +125,7 @@ def data_generator(data, batch_size=BATCH_SIZE, do_shuffle=False, sample_weight=
         if do_shuffle:
             rand.shuffle(length_order)
         for length in length_order:
-            if length - SLICE < MIN_LENGTH:
+            if length < MIN_LENGTH:
                 continue
             if do_shuffle:
                 new_data_list = rand.sample(data[length], len(data[length]))
@@ -138,11 +137,11 @@ def data_generator(data, batch_size=BATCH_SIZE, do_shuffle=False, sample_weight=
                 batch_sample_weights = []
                 for phone in new_data_list[position:position+batch_size]:
                     if phone["x_path"] not in path_cache:
-                        phone_x = np.nan_to_num(np.load(phone["x_path"]))[:, :FEATURE_SIZE-3]
+                        phone_x = np.nan_to_num(np.load(phone["x_path"]))
                         phone_x = (phone_x - z_scores[0])/z_scores[1]
-                        phone_x = phone_x[:, :FEATURE_SIZE-3]
-                        phone_x = np.insert(phone_x, FEATURE_SIZE-3, [[row["vot_conf"]], [row["vot_begin"]], [row["vot_end"]]], axis=1)
-                        phone_x = phone_x[:-SLICE, :]
+                        #phone_x = phone_x[:, :FEATURE_SIZE-3]
+                        #phone_x = np.insert(phone_x, FEATURE_SIZE-3, [[row["vot_conf"]], [row["vot_begin"]], [row["vot_end"]]], axis=1)
+                        #phone_x = phone_x[:-SLICE, :]
                         path_cache[phone["x_path"]] = phone_x
                     else:
                         phone_x = path_cache[phone["x_path"]]
@@ -176,7 +175,7 @@ def sotc_size():
 
 def sotc_generator():
     file_directory = os.path.join(s.OUTPUT_DIR, "autovot_files_sotc")
-    z_scores = np.load(os.path.join(s.OUTPUT_DIR, "zscores.npy"))
+    z_scores = np.load(os.path.join(s.OUTPUT_DIR, "zscores_new.npy"))
     y_x_s = []
     for phone in os.listdir(file_directory):
         try:
@@ -216,13 +215,12 @@ LABELS, ALLOPHONE_CLASSES, VALID_PHONEMES = get_labels(PHONEME_TO_TRAIN)
 previous_phoneme = "x"
 count = 0
 rand_p = random.Random(39)
-with open(os.path.join(s.OUTPUT_DIR, "timit_noisy_data.csv"), "r") as csvfile:
+with open(os.path.join("timit_data.csv"), "r") as csvfile:
     reader = csv.DictReader(csvfile)
     for i, row in enumerate(reader):
         if i % 50000 == 0:
             print("{}/224017".format(i))
-        phoneme = row["phoneme"].lower()
-
+        phoneme = row["underlying_phoneme"].lower()
         if phoneme not in VALID_PHONEMES:
             if PHONEME_TO_TRAIN != "t" or row["phone"] != "q":
                 continue
@@ -249,12 +247,6 @@ with open(os.path.join(s.OUTPUT_DIR, "timit_noisy_data.csv"), "r") as csvfile:
         data[length].append({
             "allophone":allophone,
             "position":pos,
-            "vot_conf":(float(row["vot_conf"])-88.0977)/515.34,
-            "vot_begin":(float(row["vot_begin"])-30.28)/43.5,
-            "vot_end":(float(row["vot_end"])-68.447)/75.344,
-            #"vot_conf":float(row["vot_conf"]),
-            #"vot_begin":float(row["vot_begin"]),
-            #"vot_end":float(row["vot_end"]),
             "phoneme":phoneme,
             "x_path":row["numpy_X"],
             "speaker":row["path"].split("/")[-2][1:],
@@ -320,7 +312,7 @@ def simple_model():
     model.add(layers.Conv1D(50, 3, activation="relu"))
     model.add(layers.MaxPooling1D(3))
     model.add(layers.Conv1D(100, 3, activation="relu"))
-    model.add(layers.GlobalAveragePooling1D())
+    model.add(layers.GlobalMaxPooling1D())
     model.add(layers.Dense(350, activation="relu"))
     model.add(layers.Dropout(0.5))
     model.add(layers.Dense(250, activation="relu"))
@@ -328,14 +320,30 @@ def simple_model():
     model.add(layers.Dense(max(allophone_mapping.values())+1, activation="softmax"))
     return model
 
-model = simple_model()
+def tiny_model():
+    model = keras.Sequential()
+    model.add(layers.GaussianNoise(0.1, input_shape=(None, FEATURE_SIZE)))
+    model.add(layers.Conv1D(25, 3, activation="relu"))
+    model.add(layers.MaxPooling1D(3))
+    model.add(layers.Conv1D(50, 3, activation="relu"))
+    model.add(layers.GlobalMaxPooling1D())
+    model.add(layers.Dense(50, activation="relu"))
+    model.add(layers.Dropout(0.5))
+    model.add(layers.Dense(25, activation="relu"))
+    model.add(layers.Dropout(0.5))
+    model.add(layers.Dense(max(allophone_mapping.values())+1, activation="softmax"))
+    return model
+
+#model = simple_model()
+model = tiny_model()
 adam = keras.optimizers.Adam(lr=0.0001, beta_1=0.9, beta_2=0.999, epsilon=None, amsgrad=True)
 model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=["categorical_accuracy"])
 model.summary()
 print("Model compiled")
-train_size = sum([ceil(len(v)/BATCH_SIZE) for length, v in train_data.items() if length - SLICE > MIN_LENGTH])
-validation_size = sum([ceil(len(v)/BATCH_SIZE) for length, v in test_data.items() if length - SLICE > MIN_LENGTH])
+train_size = sum([ceil(len(v)/BATCH_SIZE) for length, v in train_data.items()])
+validation_size = sum([ceil(len(v)/BATCH_SIZE) for length, v in test_data.items()])
 print("Sizes calculated")
+print(validation_size)
 y_s = []
 for i, (x, y) in enumerate(data_generator(test_data)):
     if i >= validation_size:
@@ -345,7 +353,7 @@ test_y = np.vstack(y_s)
 
 history = model.fit_generator(data_generator(train_data, do_shuffle=True, sample_weight=False), steps_per_epoch=train_size,\
             validation_data=data_generator(test_data), validation_steps=validation_size, epochs=EPOCHS)
-model.save("{}_model.hd5".format(PHONEME_TO_TRAIN))
+model.save("{}_model_tiny.hd5".format(PHONEME_TO_TRAIN))
 plot_history(history)
 pred = model.predict_generator(data_generator(test_data), validation_size)
 evaluate_model(np.argmax(test_y, axis=1), np.argmax(pred, axis=1), LABELS)
